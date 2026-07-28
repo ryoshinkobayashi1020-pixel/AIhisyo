@@ -126,13 +126,15 @@ export async function POST(request) {
         console.error("Invoice storage upload error:", error);
       }
     }
-    if (wantsLine) {
-      let imageUrl = "";
+    let imageUrl = "";
+    if (needsServerCopy && invoice.filePath) {
       try {
-        imageUrl = invoice.filePath ? await getInvoiceImageSignedUrl(id) : "";
+        imageUrl = await getInvoiceImageSignedUrl(id);
       } catch (error) {
         console.error("Invoice signed URL error:", error);
       }
+    }
+    if (wantsLine) {
       sendResults.line = await sendInvoiceLine({
         lineUserId: client.lineUserId,
         clientName: client.companyName,
@@ -150,6 +152,7 @@ export async function POST(request) {
       ok: true,
       invoice,
       sendResults,
+      imageUrl,
       imageBase64: image.toString("base64"),
     });
   } catch (error) {

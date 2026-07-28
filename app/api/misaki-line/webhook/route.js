@@ -14,17 +14,30 @@ function verifySignature(rawBody, signature, secret) {
   }
 }
 
-async function replyLine(replyToken, text) {
+async function replyLine(replyToken, text, imageUrl = "") {
   const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   if (!token || !replyToken) return;
-  await fetch("https://api.line.me/v2/bot/message/reply", {
+  const messages = [];
+  if (/^https:\/\//.test(imageUrl)) {
+    messages.push({
+      type: "image",
+      originalContentUrl: imageUrl,
+      previewImageUrl: imageUrl,
+    });
+  }
+  messages.push({ type: "text", text: String(text).slice(0, 4900) });
+  const response = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ replyToken, messages: [{ type: "text", text: String(text).slice(0, 4900) }] }),
-  }).catch(() => {});
+    body: JSON.stringify({ replyToken, messages }),
+  });
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`LINE返信に失敗しました（${response.status}）：${body.slice(0, 300)}`);
+  }
 }
 
 function summarizeSendResults(sendResults = {}) {
@@ -84,13 +97,16 @@ async function handleMisakiMessage(origin, text) {
   }
 
   const summary = summarizeSendResults(result.sendResults);
-  return [
-    `${result.invoice.client.companyName}様宛ての請求書を作成しました。`,
-    `請求書番号：${result.invoice.invoiceNumber}`,
-    `金額：${result.invoice.total}円`,
-    `支払期限：${result.invoice.dueDate}`,
-    summary,
-  ].filter(Boolean).join("\n");
+  return {
+    imageUrl: result.imageUrl || "",
+    text: [
+      `${result.invoice.client.companyName}様宛ての請求書を作成しました。`,
+      `請求書番号：${result.invoice.invoiceNumber}`,
+      `金額：${result.invoice.total}円`,
+      `支払期限：${result.invoice.dueDate}`,
+      summary,
+    ].filter(Boolean).join("\n"),
+  };
 }
 
 export async function POST(request) {
@@ -118,7 +134,11 @@ export async function POST(request) {
 
     try {
       const reply = await handleMisakiMessage(origin, event.message.text);
-      await replyLine(event.replyToken, reply);
+      if (typeof reply === "string") {
+        await replyLine(event.replyToken, reply);
+      } else {
+        await replyLine(event.replyToken, reply.text, reply.imageUrl);
+      }
     } catch (error) {
       console.error("Misaki LINE webhook error:", error);
       await replyLine(event.replyToken, `エラーが発生しました：${error.message}`);
