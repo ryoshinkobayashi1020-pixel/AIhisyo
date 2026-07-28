@@ -140,7 +140,8 @@ async function handleMisakiMessage(origin, text, source = {}) {
 
   return {
     // 個人トークからの指示では、請求書画像は登録済み送信先へpushする。
-    // 依頼者個人へは確認文だけを返し、請求書画像を重複送信しない。
+    // 依頼者個人へは成功メッセージも返さず、グループだけに画像と挨拶を送る。
+    skipReply: source.type === "user",
     imageUrl: ["group", "room"].includes(source.type) ? (result.imageUrl || "") : "",
     text: "いつもお世話になっております。請求書をお送りいたしますので、ご確認をお願いいたします。",
   };
@@ -171,6 +172,7 @@ export async function POST(request) {
 
     try {
       const reply = await handleMisakiMessage(origin, event.message.text, event.source);
+      if (reply?.skipReply) continue;
       if (typeof reply === "string") {
         await replyLine(event.replyToken, reply);
       } else {
