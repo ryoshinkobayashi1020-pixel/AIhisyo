@@ -96,16 +96,9 @@ async function handleMisakiMessage(origin, text) {
     return result.error || "請求書を作成できませんでした。";
   }
 
-  const summary = summarizeSendResults(result.sendResults);
   return {
     imageUrl: result.imageUrl || "",
-    text: [
-      `${result.invoice.client.companyName}様宛ての請求書を作成しました。`,
-      `請求書番号：${result.invoice.invoiceNumber}`,
-      `金額：${result.invoice.total}円`,
-      `支払期限：${result.invoice.dueDate}`,
-      summary,
-    ].filter(Boolean).join("\n"),
+    text: "いつもお世話になっております。請求書をお送りいたしますので、ご確認をお願いいたします。",
   };
 }
 
