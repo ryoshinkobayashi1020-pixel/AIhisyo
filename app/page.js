@@ -685,9 +685,9 @@ export default function Home() {
           <header className="accounting-header">
             <div className="accounting-avatar">🧾</div>
             <div>
-              <span>経理部・請求書担当</span>
-              <h3 id="accountingTitle">みさきの請求書デスク</h3>
-              <p>音声またはテキストから、送付しやすい高画質の請求書画像を作成します</p>
+              <span>秘書室・予定登録・経理担当</span>
+              <h3 id="accountingTitle">秘書みさきのデスク</h3>
+              <p>撮影日程の確認・登録と、請求書画像の作成・管理を行います</p>
             </div>
           </header>
 
@@ -810,7 +810,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260729-google-calendar" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260729-misaki-secretary" strategy="afterInteractive" />
     </>
   );
 }
