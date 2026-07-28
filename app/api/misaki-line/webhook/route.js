@@ -51,7 +51,27 @@ function summarizeSendResults(sendResults = {}) {
   return lines.join("\n");
 }
 
-async function handleMisakiMessage(origin, text) {
+function getLineSourceTarget(source = {}) {
+  if (source.type === "group") return { targetId: source.groupId || "", targetType: "group" };
+  if (source.type === "room") return { targetId: source.roomId || "", targetType: "room" };
+  return { targetId: source.userId || "", targetType: "user" };
+}
+
+async function registerLineGroupTarget(origin, clientId, source) {
+  const { targetId, targetType } = getLineSourceTarget(source);
+  if (!clientId || !targetId || !["group", "room"].includes(targetType)) return;
+  const response = await fetch(`${origin}/api/accounting`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "set-line-target", clientId, targetId, targetType }),
+  });
+  if (!response.ok) {
+    const result = await response.json().catch(() => ({}));
+    throw new Error(result.error || "LINEグループを請求書送信先へ登録できませんでした。");
+  }
+}
+
+async function handleMisakiMessage(origin, text, source = {}) {
   const parseResponse = await fetch(`${origin}/api/accounting/parse`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -60,6 +80,17 @@ async function handleMisakiMessage(origin, text) {
   const parsed = await parseResponse.json().catch(() => ({}));
   if (!parseResponse.ok) {
     return parsed.error || "請求内容を読み取れませんでした。";
+  }
+
+  // グループまたは複数人トークから登録済みクライアントを指定したら、
+  // そのトークを以後の既定送信先として記録する。
+  await registerLineGroupTarget(origin, parsed.clientId, source);
+  if (
+    parsed.clientId
+    && ["group", "room"].includes(source.type)
+    && /(この(グループ|トーク)|請求書).*(送信先|送り先|登録)|(送信先|送り先).*(登録)/.test(text)
+  ) {
+    return "このLINEトークを請求書の送信先として登録しました。";
   }
 
   const missing = [];
@@ -88,6 +119,10 @@ async function handleMisakiMessage(origin, text) {
       note: parsed.note,
       bankAccountId: parsed.bankAccountId,
       items: parsed.items,
+      // グループ内の指示はreply APIで同じ場所へ画像を返すため、
+      // push APIによる二重送信を止める。個人トークからの指示は
+      // 登録済みグループへpushしつつ、依頼者本人にもreplyする。
+      ...(source.type === "group" || source.type === "room" ? { sendChannels: [] } : {}),
       archiveServerCopy: true, // LINE経由はブラウザが開いていないため、サーバー側に保管する
     }),
   });
@@ -123,10 +158,10 @@ export async function POST(request) {
 
   for (const event of events) {
     if (event.type !== "message" || event.message?.type !== "text") continue;
-    if (event.source?.type !== "user") continue; // 1:1トークのみ対応（グループ・複数人トークは対象外）
+    if (!["user", "group", "room"].includes(event.source?.type)) continue;
 
     try {
-      const reply = await handleMisakiMessage(origin, event.message.text);
+      const reply = await handleMisakiMessage(origin, event.message.text, event.source);
       if (typeof reply === "string") {
         await replyLine(event.replyToken, reply);
       } else {

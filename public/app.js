@@ -5932,7 +5932,7 @@ function editAccountingClient(clientId) {
     client.contactName ? `担当者：${client.contactTitle ? `${client.contactTitle} ` : ""}${client.contactName}` : "",
     client.phone ? `電話：${client.phone}` : "",
     client.email ? `メール：${client.email}` : "",
-    client.lineUserId ? `LINEユーザーID：${client.lineUserId}` : "",
+    client.lineUserId ? `LINE送信先ID：${client.lineUserId}` : "",
     client.defaultItem ? `通常の請求項目：${client.defaultItem}` : "",
     client.defaultAmount ? `通常金額：${accountingYen(client.defaultAmount)}（${client.taxMode === "excluded" ? "税抜" : "税込"}）` : "",
     client.paymentTerms ? `支払条件：${client.paymentTerms}` : "",

@@ -764,7 +764,7 @@ export default function Home() {
               <form id="accountingClientForm" className="accounting-card">
                 <input type="hidden" id="clientId" />
                 <h4 id="accountingClientFormTitle">新しいクライアントを追加</h4>
-                <p className="client-single-entry-help">法人名または個人名、郵便番号、住所、担当者、呼び名、支払条件などを、分けずにまとめて話すか入力してください。メールアドレスや「LINEユーザーID：U〜」を含めると、請求書の自動送信先として使えます。</p>
+                <p className="client-single-entry-help">法人名または個人名、郵便番号、住所、担当者、呼び名、支払条件などを、分けずにまとめて話すか入力してください。LINEグループ内でその請求先を指定すると、そのグループが請求書の送信先として自動登録されます。</p>
                 <button type="button" id="clientRegistrationMic" className="client-registration-mic">🎤 音声でまとめて入力</button>
                 <textarea id="clientRegistrationText" className="client-single-entry" rows={12} required placeholder="法人の例：株式会社山田工業。郵便番号920-0000、住所は石川県金沢市〇〇1-2-3。営業部の山田太郎さん。月末締め翌月末払い。&#10;&#10;個人の例：山田太郎。個人の請求先。郵便番号920-0000、住所は石川県金沢市〇〇1-2-3。"></textarea>
                 <p id="clientRegistrationStatus" className="client-registration-status" aria-live="polite"></p>
@@ -804,7 +804,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260728-team-size-by-members" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260728-line-group-routing" strategy="afterInteractive" />
     </>
   );
 }

@@ -42,6 +42,7 @@ export async function POST(request) {
         phone: String(incoming.phone || "").trim(),
         email: String(incoming.email || "").trim(),
         lineUserId: String(incoming.lineUserId || "").trim(),
+        lineTargetType: ["user", "group", "room"].includes(incoming.lineTargetType) ? incoming.lineTargetType : "",
         registrationNumber: String(incoming.registrationNumber || "").trim(),
         closingDay: String(incoming.closingDay || "").trim(),
         paymentDay: String(incoming.paymentDay || "").trim(),
@@ -58,6 +59,15 @@ export async function POST(request) {
       const index = data.clients.findIndex(item => item.id === id);
       if (index >= 0) data.clients[index] = { ...data.clients[index], ...client };
       else data.clients.push({ ...client, createdAt: new Date().toISOString() });
+    } else if (action === "set-line-target") {
+      const client = data.clients.find(item => item.id === body.clientId);
+      const targetType = ["group", "room"].includes(body.targetType) ? body.targetType : "";
+      const targetId = String(body.targetId || "").trim();
+      if (!client) return Response.json({ error: "登録済みの請求先が見つかりません。" }, { status: 404 });
+      if (!targetType || !targetId) return Response.json({ error: "LINE送信先を特定できません。" }, { status: 400 });
+      client.lineUserId = targetId;
+      client.lineTargetType = targetType;
+      client.updatedAt = new Date().toISOString();
     } else if (action === "delete-client") {
       const client = data.clients.find(item => item.id === body.clientId);
       if (client) client.active = false;
