@@ -1,0 +1,118 @@
+const DEFAULT_MODEL = "gpt-5.6-luna";
+
+const STAFF = [
+  ["reina", "SPIテスト担当"],
+  ["sakura", "漢字テスト担当"],
+  ["takumi", "算数テスト担当"],
+  ["asuka", "応募者との面接専用（面接を開始する）"],
+  ["elf_sketch", "えるふろんてぃあの寸劇系TikTok台本制作"],
+  ["elf_if", "えるふろんてぃあのもしもシリーズ系TikTok台本制作"],
+  ["elf_lively", "えるふろんてぃあのにぎやか・わちゃわちゃ系TikTok台本制作"],
+  ["elf_jobs", "えるふろんてぃあの求人系TikTok台本制作"],
+  ["mana_jobs", "マナコーポレーションの求人TikTok台本制作"],
+  ["miyabis_ads", "ミヤビスの広告TikTok台本制作"],
+  ["kabayaki_script", "かばやき屋のTikTok運用代行・台本制作"],
+  ["invoice_clerk", "合同会社良心の経理・請求書画像作成・請求先管理"],
+  ["ryoshin_jobs", "合同会社良心の求人TikTok台本制作"],
+  ["ryoshin_video_editor", "合同会社良心のTikTok動画編集・編集指示制作"],
+];
+
+const OUTPUT_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    staff_id: { type: "string", enum: STAFF.map(([id]) => id) },
+    understood_instruction: { type: "string" },
+    short_summary: { type: "string" },
+  },
+  required: ["staff_id", "understood_instruction", "short_summary"],
+};
+
+function extractOutputText(data) {
+  if (typeof data.output_text === "string") return data.output_text;
+  for (const item of data.output || []) {
+    for (const content of item.content || []) {
+      if (content.type === "output_text" && typeof content.text === "string") return content.text;
+    }
+  }
+  return "";
+}
+
+export async function POST(request) {
+  if (!process.env.OPENAI_API_KEY) {
+    return Response.json(
+      { error: "OPENAI_API_KEYが.env.localに設定されていません。" },
+      { status: 503 }
+    );
+  }
+
+  const { instruction = "", targetStaffId = "" } = await request.json();
+  const cleanInstruction = String(instruction).trim().slice(0, 8000);
+  if (!cleanInstruction) {
+    return Response.json({ error: "指示内容がありません。" }, { status: 400 });
+  }
+
+  const normalizedInstruction = cleanInstruction
+    .replace(/[\u30a1-\u30f6]/g, char => String.fromCharCode(char.charCodeAt(0) - 0x60))
+    .replace(/\s+/g, "");
+  const explicitlyCallsAsuka = /(あすか|あすこ|飛鳥|明日香|安須賀)/.test(normalizedInstruction);
+  const fixedTarget = STAFF.some(([id]) => id === targetStaffId)
+    ? targetStaffId
+    : explicitlyCallsAsuka
+      ? "asuka"
+      : "";
+  const staffList = STAFF.map(([id, role]) => `- ${id}: ${role}`).join("\n");
+  const prompt = `あなたはAI社員オフィスの業務受付です。ユーザーの音声認識結果を理解し、実行しやすい指示に整理してください。
+
+音声認識結果:
+${cleanInstruction}
+
+スタッフ一覧:
+${staffList}
+
+ルール:
+- ユーザーの目的、成果物、対象者、媒体、口調、長さ、期限、固有名詞、ハッシュタグを可能な限り保持する
+- 聞き間違いと思われる箇所も、根拠なく別の内容へ変更しない
+- 情報を捏造しない。不足情報は不足したまま簡潔に整理する
+- understood_instructionは、担当スタッフがそのまま作業に使える日本語の指示文にする
+- short_summaryは業務ログ用に30文字程度で要約する
+- スタッフ名を呼んでいる場合は、業務名に似た単語が含まれていても、呼ばれた本人を優先する
+${fixedTarget
+  ? `- 担当者はユーザーが直接選んだ ${fixedTarget} に固定し、staff_idを変更しない`
+  : "- 内容に最も適した担当者を1人選ぶ"}`;
+
+  try {
+    const openAIResponse = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OFFICE_ROUTER_MODEL || DEFAULT_MODEL,
+        input: prompt,
+        reasoning: { effort: "none" },
+        text: {
+          format: {
+            type: "json_schema",
+            name: "understood_instruction",
+            strict: true,
+            schema: OUTPUT_SCHEMA,
+          },
+        },
+      }),
+    });
+    const data = await openAIResponse.json();
+    if (!openAIResponse.ok) {
+      console.error("Instruction understanding API error:", openAIResponse.status, data);
+      return Response.json({ error: "指示内容を理解できませんでした。" }, { status: openAIResponse.status });
+    }
+
+    const result = JSON.parse(extractOutputText(data));
+    if (fixedTarget) result.staff_id = fixedTarget;
+    return Response.json(result);
+  } catch (error) {
+    console.error("Instruction understanding error:", error);
+    return Response.json({ error: "指示の解析中にエラーが発生しました。" }, { status: 502 });
+  }
+}
