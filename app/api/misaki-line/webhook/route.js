@@ -5,12 +5,10 @@ export const runtime = "nodejs";
 const ONLINE_SCHEDULING_URL = "https://app.aitemasu.me/ev/57pzl1w1rtsx";
 
 function internalJsonHeaders() {
-  const password = String(process.env.OFFICE_ACCESS_PASSWORD || "");
-  const user = String(process.env.OFFICE_ACCESS_USER || "kobayashi");
   return {
     "Content-Type": "application/json",
-    ...(password
-      ? { Authorization: `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}` }
+    ...(process.env.LINE_CHANNEL_SECRET
+      ? { "x-ai-office-internal": process.env.LINE_CHANNEL_SECRET }
       : {}),
   };
 }

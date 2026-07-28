@@ -1,37 +1,56 @@
-function unauthorized() {
-  return new Response("Authentication required.", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="AI社員オフィス", charset="UTF-8"',
-      "Cache-Control": "no-store",
-    },
-  });
+import { NextResponse } from "next/server";
+
+const ACCESS_COOKIE = "ai_office_access_token";
+const ALLOWED_EMAIL = "ryoshin.kobayashi1020@gmail.com";
+
+function unauthorizedApi() {
+  return NextResponse.json({ error: "ログインが必要です。" }, { status: 401 });
 }
 
-export function proxy(request) {
+export async function proxy(request) {
   const pathname = request.nextUrl.pathname;
 
-  // LINEは署名検証済みWebhookだけを外部公開する。
-  if (pathname === "/api/misaki-line/webhook") return;
+  if (pathname === "/api/misaki-line/webhook") return NextResponse.next();
+  if (pathname === "/login" || pathname === "/api/auth/session") return NextResponse.next();
 
-  const password = String(process.env.OFFICE_ACCESS_PASSWORD || "");
-  // 環境変数を登録するまでは既存連携を壊さない。登録後は全画面・APIを保護する。
-  if (!password) return;
+  const internalSecret = request.headers.get("x-ai-office-internal") || "";
+  if (
+    internalSecret
+    && process.env.LINE_CHANNEL_SECRET
+    && internalSecret === process.env.LINE_CHANNEL_SECRET
+  ) {
+    return NextResponse.next();
+  }
 
-  const expectedUser = String(process.env.OFFICE_ACCESS_USER || "kobayashi");
-  const authorization = request.headers.get("authorization") || "";
-  if (!authorization.startsWith("Basic ")) return unauthorized();
+  const supabaseUrl = String(process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
+  const anonKey = String(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "");
+  const accessToken = request.cookies.get(ACCESS_COOKIE)?.value || "";
+  if (!supabaseUrl || !anonKey || !accessToken) {
+    if (pathname.startsWith("/api/")) return unauthorizedApi();
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
   try {
-    const decoded = atob(authorization.slice(6));
-    const separator = decoded.indexOf(":");
-    const user = separator >= 0 ? decoded.slice(0, separator) : "";
-    const suppliedPassword = separator >= 0 ? decoded.slice(separator + 1) : "";
-    if (user === expectedUser && suppliedPassword === password) return;
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    });
+    const user = await response.json().catch(() => ({}));
+    const allowedEmail = String(process.env.OFFICE_ALLOWED_EMAIL || ALLOWED_EMAIL).toLowerCase();
+    if (response.ok && String(user.email || "").toLowerCase() === allowedEmail) {
+      return NextResponse.next();
+    }
   } catch {
-    // 不正なAuthorizationヘッダーは下の401へ進める。
+    // 認証確認に失敗した場合はアクセスを許可しない。
   }
-  return unauthorized();
+
+  if (pathname.startsWith("/api/")) return unauthorizedApi();
+  const redirect = NextResponse.redirect(new URL("/login", request.url));
+  redirect.cookies.delete(ACCESS_COOKIE);
+  return redirect;
 }
 
 export const config = {
