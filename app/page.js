@@ -278,7 +278,7 @@ export default function Home() {
 
       <nav className="office-room-switcher" aria-label="部屋を切り替える">
         <button type="button" className="active" data-office-room="operations">
-          <span>🤝</span><strong>採用・経理</strong>
+          <span>🤝</span><strong>採用・秘書</strong>
         </button>
         <button type="button" data-office-room="tiktok">
           <span>🎬</span><strong>TikTok運用</strong>
