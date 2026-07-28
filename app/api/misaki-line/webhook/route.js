@@ -90,6 +90,40 @@ function isMisakiMentioned(event) {
   return /[@＠]\s*(?:みさき|ミサキ|秘書みさき)/.test(String(event.message?.text || ""));
 }
 
+async function isKobayashiSender(event) {
+  const userId = String(event.source?.userId || "");
+  if (!userId) return false;
+
+  const registeredIds = [
+    process.env.LINE_KOBAYASHI_USER_ID,
+    process.env.LINE_ADMIN_USER_ID,
+  ].flatMap(value => String(value || "").split(","))
+    .map(value => value.trim())
+    .filter(Boolean);
+  if (registeredIds.length) return registeredIds.includes(userId);
+
+  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  if (!token) return false;
+  const source = event.source || {};
+  const profilePath = source.type === "group" && source.groupId
+    ? `/v2/bot/group/${encodeURIComponent(source.groupId)}/member/${encodeURIComponent(userId)}`
+    : source.type === "room" && source.roomId
+      ? `/v2/bot/room/${encodeURIComponent(source.roomId)}/member/${encodeURIComponent(userId)}`
+      : "";
+  if (!profilePath) return false;
+
+  try {
+    const response = await fetch(`https://api.line.me${profilePath}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return false;
+    const profile = await response.json().catch(() => ({}));
+    return /小林/.test(String(profile.displayName || ""));
+  } catch {
+    return false;
+  }
+}
+
 function onlineMeetingReply() {
   return `オンラインでのお打ち合わせは、こちらから日程調整をお願いいたします。\n${ONLINE_SCHEDULING_URL}`;
 }
@@ -227,10 +261,14 @@ export async function POST(request) {
     if (!["user", "group", "room"].includes(event.source?.type)) continue;
     if (
       ["group", "room"].includes(event.source.type)
-      && !(isMisakiMentioned(event) && shouldHandleGroupMessage(event.message.text))
+      && !(
+        isMisakiMentioned(event)
+        && shouldHandleGroupMessage(event.message.text)
+        && await isKobayashiSender(event)
+      )
     ) {
       // LINEグループでは日程調整を行わない。請求書の指示も、
-      // みさきが明示的に＠メンションされた場合だけ処理する。
+      // 小林さんがみさきを明示的に＠メンションした場合だけ処理する。
       continue;
     }
 
