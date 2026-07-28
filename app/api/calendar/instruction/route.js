@@ -1,6 +1,6 @@
 import {
-  createShootingEvent,
-  isShootingSlotAvailable,
+  createCalendarEvent,
+  isCalendarSlotAvailable,
   loadCalendarConversation,
   saveCalendarConversation,
 } from "@/lib/googleCalendar";
@@ -18,8 +18,10 @@ const INSTRUCTION_SCHEMA = {
     startIso: { type: "string" },
     title: { type: "string" },
     clientName: { type: "string" },
+    eventType: { type: "string", enum: ["shooting", "meeting", "other"] },
+    durationMinutes: { type: "number" },
   },
-  required: ["action", "startIso", "title", "clientName"],
+  required: ["action", "startIso", "title", "clientName", "eventType", "durationMinutes"],
 };
 
 function extractOutputText(data) {
@@ -67,7 +69,7 @@ function validStart(value) {
 async function understandInstruction(text, pending) {
   if (!process.env.OPENAI_API_KEY) throw new Error("予定指示の読み取りAPIが設定されていません。");
   const now = new Date();
-  const prompt = `あなたは合同会社良心のみさきです。撮影日程の自然な日本語を整理してください。
+  const prompt = `あなたは合同会社良心のみさきです。予定調整の自然な日本語を整理してください。
 
 現在日時: ${now.toISOString()}
 タイムゾーン: Asia/Tokyo
@@ -77,7 +79,7 @@ async function understandInstruction(text, pending) {
 
 action:
 - check: 特定の日時が空いているか質問している
-- suggest: 空いている日や時間を2つほど聞いている
+- suggest: 空いている日や時間を複数聞いている
 - book: 「その時間で」「15時で」「そこに決定」など、日時を確定して予定登録を頼んでいる
 - clarify: 日程に関係しない、または判断不能
 
@@ -85,8 +87,10 @@ action:
 - 「今日」「明日」「来週」などは現在日時を基準にする
 - startIsoは日時が一意に決まる場合だけ、+09:00付きISO 8601で入れる
 - bookで時刻だけ言われた場合、直前候補から一致する候補が1件なら、その完全な日時をstartIsoへ入れる
-- 撮影時間は2時間だが、startIsoには開始時刻だけを入れる
-- titleは相手や案件が分かれば「〇〇 撮影」、不明なら「撮影」
+- eventTypeは撮影ならshooting、打ち合わせ・会議・面談ならmeeting、それ以外または不明ならother
+- durationMinutesは撮影なら120、打ち合わせ・会議・面談なら60、明示された所要時間があればその分数。不明なら60
+- startIsoには開始時刻だけを入れる
+- titleは相手や案件と予定種別が分かる自然な名前。不明なら「予定」
 - 情報を作らない`;
 
   const response = await fetch("https://api.openai.com/v1/responses", {
@@ -114,22 +118,40 @@ action:
   return JSON.parse(extractOutputText(data));
 }
 
-async function suggestSlots() {
-  const options = [];
-  const today = new Date();
+function nextMonday(from) {
+  const result = new Date(from);
+  const weekday = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, weekday: "short" }).format(result);
+  const day = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[weekday] ?? 0;
+  const daysUntilMonday = ((8 - day) % 7) || 7;
+  result.setDate(result.getDate() + daysUntilMonday);
+  return result;
+}
+
+function durationLabel(minutes) {
+  if (minutes === 60) return "1時間";
+  if (minutes === 120) return "2時間";
+  return `${minutes}分`;
+}
+
+async function suggestSlots({ startDate, durationMinutes, travelMinutes }) {
+  const availableDays = [];
   const candidateHours = [10, 13, 16, 19];
-  for (let dayOffset = 1; dayOffset <= 21 && options.length < 2; dayOffset += 1) {
-    const day = new Date(today.getTime() + dayOffset * 24 * 60 * 60 * 1000);
-    for (const hour of candidateHours) {
+  for (let dayOffset = 0; dayOffset < 7; dayOffset += 1) {
+    const day = new Date(startDate.getTime() + dayOffset * 24 * 60 * 60 * 1000);
+    const rotatedHours = candidateHours.map((_, index) => candidateHours[(index + dayOffset) % candidateHours.length]);
+    for (const hour of rotatedHours) {
+      if (hour * 60 + durationMinutes > 21 * 60) continue;
       const startIso = tokyoIso(day, hour);
-      const checked = await isShootingSlotAvailable(startIso);
+      const checked = await isCalendarSlotAvailable(startIso, durationMinutes, travelMinutes);
       if (checked.available) {
-        options.push({ startIso: checked.start.toISOString(), label: formatJapanese(checked.start) });
-        if (options.length === 2) break;
+        availableDays.push({ startIso: checked.start.toISOString(), label: formatJapanese(checked.start) });
+        break;
       }
     }
   }
-  return options;
+  if (availableDays.length <= 3) return availableDays;
+  const middleIndex = Math.floor((availableDays.length - 1) / 2);
+  return [availableDays[0], availableDays[middleIndex], availableDays[availableDays.length - 1]];
 }
 
 export async function POST(request) {
@@ -142,22 +164,30 @@ export async function POST(request) {
     const pending = await loadCalendarConversation(conversationId);
     const parsed = await understandInstruction(instruction, pending);
     let startIso = validStart(parsed.startIso);
+    const eventType = parsed.eventType || pending?.eventType || "other";
+    const durationMinutes = Math.min(240, Math.max(30, Number(parsed.durationMinutes) || (eventType === "shooting" ? 120 : 60)));
+    const travelMinutes = eventType === "shooting" ? 60 : 0;
 
     if (parsed.action === "suggest") {
-      const options = await suggestSlots();
+      const baseDate = /来週以降/.test(instruction)
+        ? nextMonday(new Date())
+        : new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const options = await suggestSlots({ startDate: baseDate, durationMinutes, travelMinutes });
       if (!options.length) {
-        return Response.json({ action: "suggest", message: "直近3週間でご案内できる撮影枠が見つかりませんでした。" });
+        return Response.json({ action: "suggest", message: "ご指定の開始日から7日間に、ご案内できる予定候補が見つかりませんでした。" });
       }
       await saveCalendarConversation(conversationId, {
         action: "suggest",
-        title: parsed.title || pending?.title || "撮影",
+        title: parsed.title || pending?.title || "予定",
         clientName: parsed.clientName || pending?.clientName || "",
+        eventType,
+        durationMinutes,
         options,
       });
       return Response.json({
         action: "suggest",
         options,
-        message: `空いている撮影枠は、${options.map(option => option.label).join("、または")}です。ご希望の日時をお知らせください。`,
+        message: `空いている候補は、${options.map(option => option.label).join("、または")}です。ご希望の日時をお知らせください。`,
       });
     }
 
@@ -165,12 +195,14 @@ export async function POST(request) {
       if (!startIso) {
         return Response.json({ action: "clarify", message: "確認したい日付と開始時刻を教えてください。" });
       }
-      const checked = await isShootingSlotAvailable(startIso);
+      const checked = await isCalendarSlotAvailable(startIso, durationMinutes, travelMinutes);
       const option = { startIso: checked.start.toISOString(), label: formatJapanese(checked.start) };
       await saveCalendarConversation(conversationId, {
         action: "check",
-        title: parsed.title || pending?.title || "撮影",
+        title: parsed.title || pending?.title || "予定",
         clientName: parsed.clientName || pending?.clientName || "",
+        eventType,
+        durationMinutes,
         options: checked.available ? [option] : [],
       });
       return Response.json({
@@ -178,8 +210,8 @@ export async function POST(request) {
         available: checked.available,
         options: checked.available ? [option] : [],
         message: checked.available
-          ? `${option.label}から2時間、撮影可能です。この時間でよろしければ「この時間で」とお伝えください。`
-          : `${option.label}は予定があるため難しいです。別の空き時間を2つお探しできます。`,
+          ? `${option.label}から${durationLabel(durationMinutes)}、予定を入れられます。この時間でよろしければ「この時間で」とお伝えください。`
+          : `${option.label}は予定があるため難しいです。別の空き時間を3つお探しできます。`,
       });
     }
 
@@ -188,7 +220,9 @@ export async function POST(request) {
       if (!startIso) {
         return Response.json({ action: "clarify", message: "登録する日付と開始時刻をもう一度教えてください。" });
       }
-      const checked = await isShootingSlotAvailable(startIso);
+      const bookedDuration = Number(pending?.durationMinutes) || durationMinutes;
+      const bookedEventType = pending?.eventType || eventType;
+      const checked = await isCalendarSlotAvailable(startIso, bookedDuration, bookedEventType === "shooting" ? 60 : 0);
       if (!checked.available) {
         return Response.json({
           action: "book",
@@ -198,10 +232,11 @@ export async function POST(request) {
       }
       const title = parsed.title && parsed.title !== "撮影"
         ? parsed.title
-        : pending?.title || "撮影";
-      const event = await createShootingEvent({
+        : pending?.title || "予定";
+      const event = await createCalendarEvent({
         startIso,
         title,
+        durationMinutes: bookedDuration,
         description: parsed.clientName || pending?.clientName
           ? `撮影先：${parsed.clientName || pending.clientName}`
           : "",
@@ -217,17 +252,16 @@ export async function POST(request) {
         booked: true,
         eventId: event.id,
         htmlLink: event.htmlLink || "",
-        message: `${formatJapanese(startIso)}から2時間で、Googleカレンダーに「${title}」を登録しました。`,
+        message: `${formatJapanese(startIso)}から${durationLabel(bookedDuration)}で、Googleカレンダーに「${title}」を登録しました。`,
       });
     }
 
     return Response.json({
       action: "clarify",
-      message: "撮影日の空き確認なら、日付と開始時刻を教えてください。空いている候補を探すこともできます。",
+      message: "予定の空き確認なら、日付と開始時刻を教えてください。空いている候補を探すこともできます。",
     });
   } catch (error) {
     console.error("Calendar instruction error:", error);
     return Response.json({ error: error.message || "Googleカレンダーを確認できませんでした。" }, { status: 500 });
   }
 }
-
