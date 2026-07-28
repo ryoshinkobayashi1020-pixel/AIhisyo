@@ -61,7 +61,7 @@ function getLineSourceTarget(source = {}) {
 
 function isCalendarInstruction(text) {
   const value = String(text || "");
-  return /(空いて|空き(?:の日|時間)|可能(?:ですか|でしょうか|な日|な時間)|都合(?:は|の良い)|いつ(?:にします|がいい|が空いて|空いて|なら)|何日(?:が|なら)?.*可能|何時(?:が|なら)?.*可能|日程(?:を|の)?(?:確認|相談|調整)|撮影日(?:を|の)?(?:確認|相談)|予定.*(?:キャンセル|取消|取り消|削除)|(?:キャンセル|取消|取り消|削除).*(?:予定|撮影|打ち合わせ|面談)|(?:この|その|さっきの|先ほどの|登録した)(?:予定)?を?(?:キャンセル|取消|取り消|削除)|(?:この|その)(?:時間|日時|日程|候補)で|(?:1|１|一|2|２|二|3|３|三)(?:つ目|番目|番)で|\d{1,2}月\d{1,2}日.*\d{1,2}時|\d{1,2}時(?:半)?(?:で|から).*(?:お願い|決定|確定))/.test(value)
+  return /(空いて|空き(?:の日|時間)|可能(?:ですか|でしょうか|な日|な時間)|都合(?:は|の良い)|いつ(?:にします|がいい|が空いて|空いて|なら)|何日(?:が|なら)?.*可能|何時(?:が|なら)?.*可能|日程(?:を|の)?(?:確認|相談|調整)|撮影日(?:を|の)?(?:確認|相談)|(?:予定|撮影|打ち合わせ|打合せ|面談).*(?:追加|登録|入れて|入れといて)|カレンダー.*(?:追加|登録|入れて|入れといて)|予定.*(?:キャンセル|取消|取り消|削除)|(?:キャンセル|取消|取り消|削除).*(?:予定|撮影|打ち合わせ|面談)|(?:この|その|さっきの|先ほどの|登録した)(?:予定)?を?(?:キャンセル|取消|取り消|削除)|(?:この|その)(?:時間|日時|日程|候補)で|(?:1|１|一|2|２|二|3|３|三)(?:つ目|番目|番)で|\d{1,2}(?:月|[/-])\d{1,2}日?.*\d{1,2}時|\d{1,2}時(?:半)?で(?:お願い)?|\d{1,2}時(?:半)?から.*(?:お願い|決定|確定))/.test(value)
     && !/(請求書|請求先|振込先|入金)/.test(value);
 }
 
@@ -277,18 +277,18 @@ export async function POST(request) {
       const mode = meetingMode(text);
       const reply = text.includes("請求書")
         ? await handleMisakiMessage(origin, text, event.source)
-        : mode === "online"
-          ? onlineMeetingReply()
-          : mode === "unspecified"
-            ? unspecifiedMeetingReply()
-            : mode === "offline"
-              ? await handleCalendarMessage(
-                origin,
-                `${text}\n開始日から7日間で、空いている候補を3つ出してください。`,
-                event.source
-              )
-              : isCalendarInstruction(text)
-                ? await handleCalendarMessage(origin, text, event.source)
+        : isCalendarInstruction(text)
+          ? await handleCalendarMessage(origin, text, event.source)
+          : mode === "online"
+            ? onlineMeetingReply()
+            : mode === "unspecified"
+              ? unspecifiedMeetingReply()
+              : mode === "offline"
+                ? await handleCalendarMessage(
+                  origin,
+                  `${text}\n開始日から7日間で、空いている候補を3つ出してください。`,
+                  event.source
+                )
                 : await handleMisakiMessage(origin, text, event.source);
       if (reply?.skipReply) continue;
       if (typeof reply === "string") {
