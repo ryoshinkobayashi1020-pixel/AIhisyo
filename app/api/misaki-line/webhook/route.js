@@ -4,6 +4,17 @@ export const runtime = "nodejs";
 
 const ONLINE_SCHEDULING_URL = "https://app.aitemasu.me/ev/57pzl1w1rtsx";
 
+function internalJsonHeaders() {
+  const password = String(process.env.OFFICE_ACCESS_PASSWORD || "");
+  const user = String(process.env.OFFICE_ACCESS_USER || "kobayashi");
+  return {
+    "Content-Type": "application/json",
+    ...(password
+      ? { Authorization: `Basic ${Buffer.from(`${user}:${password}`).toString("base64")}` }
+      : {}),
+  };
+}
+
 // LINEからのWebhookは「x-line-signature」ヘッダーで署名されている。
 // チャネルシークレットで検証しないと、誰でも偽のリクエストを送れてしまう。
 function verifySignature(rawBody, signature, secret) {
@@ -136,7 +147,7 @@ async function handleCalendarMessage(origin, text, source = {}) {
   const { targetId, targetType } = getLineSourceTarget(source);
   const response = await fetch(`${origin}/api/calendar/instruction`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalJsonHeaders(),
     body: JSON.stringify({
       instruction: text,
       conversationId: `line-${targetType}-${targetId}`,
@@ -152,7 +163,7 @@ async function registerLineGroupTarget(origin, clientId, source) {
   if (!clientId || !targetId || !["group", "room"].includes(targetType)) return;
   const response = await fetch(`${origin}/api/accounting`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalJsonHeaders(),
     body: JSON.stringify({ action: "set-line-target", clientId, targetId, targetType }),
   });
   if (!response.ok) {
@@ -164,7 +175,7 @@ async function registerLineGroupTarget(origin, clientId, source) {
 async function handleMisakiMessage(origin, text, source = {}) {
   const parseResponse = await fetch(`${origin}/api/accounting/parse`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalJsonHeaders(),
     body: JSON.stringify({ instruction: text }),
   });
   const parsed = await parseResponse.json().catch(() => ({}));
@@ -203,7 +214,7 @@ async function handleMisakiMessage(origin, text, source = {}) {
 
   const invoiceResponse = await fetch(`${origin}/api/accounting/invoice`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: internalJsonHeaders(),
     body: JSON.stringify({
       clientId: parsed.clientId,
       invoiceDate: parsed.invoiceDate,
