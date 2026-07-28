@@ -685,9 +685,9 @@ export default function Home() {
           <header className="accounting-header">
             <div className="accounting-avatar">🧾</div>
             <div>
-              <span>秘書室・予定登録・経理担当</span>
-              <h3 id="accountingTitle">秘書みさきのデスク</h3>
-              <p>撮影日程の確認・登録と、請求書画像の作成・管理を行います</p>
+              <span>請求担当・社長個人予定担当</span>
+              <h3 id="accountingTitle">みさきのデスク</h3>
+              <p>社長の個人予定の確認・登録と、請求書画像の作成・管理を行います</p>
             </div>
           </header>
 
@@ -795,7 +795,7 @@ export default function Home() {
               </div>
               <div className="accounting-card">
                 <h4>Googleカレンダー連携</h4>
-                <p>みさきが撮影日の空き確認と、確定した撮影予定の登録を行います。</p>
+                <p>みさきが社長の個人予定を確認し、確定した予定を登録します。</p>
                 <p id="calendarConnectionStatus" aria-live="polite">接続状態を確認しています…</p>
                 <a className="btn-primary calendar-connect-button" id="calendarConnectButton" href="/api/calendar/auth">Googleカレンダーに接続</a>
               </div>

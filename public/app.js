@@ -15,7 +15,7 @@ const STAFF = [
   { id: "mana_jobs", name: "まな", gender: "female", role: "求人台本制作担当", emoji: "📣", grad: ["#ff8d76", "#d94f6d"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
   { id: "miyabis_ads", name: "みやび", gender: "female", role: "広告台本制作担当", emoji: "📢", grad: ["#62b9ef", "#5567cc"], ear: "pointy", eyes: "happy", accessory: "star", shape: "tall" },
   { id: "kabayaki_script", name: "かえで", gender: "female", role: "TikTok台本制作担当", emoji: "🎥", grad: ["#e5a84d", "#9a6330"], ear: "round", eyes: "happy", accessory: "flower", shape: "round" },
-  { id: "invoice_clerk", name: "みさき", gender: "female", role: "秘書・予定登録・経理担当", emoji: "📅", grad: ["#ff91c8", "#f3b64c"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
+  { id: "invoice_clerk", name: "みさき", gender: "female", role: "請求担当・社長個人予定担当", emoji: "📅", grad: ["#ff91c8", "#f3b64c"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
   { id: "ryoshin_jobs", name: "ことは", gender: "female", role: "求人TikTok台本担当", emoji: "📣", grad: ["#a77de8", "#6544ae"], ear: "round", eyes: "sparkle", accessory: "star", shape: "round" },
   { id: "ryoshin_video_editor", name: "そうた", gender: "male", role: "TikTok動画編集担当", emoji: "✂️", grad: ["#4f9fd8", "#285c94"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
 ];
@@ -32,7 +32,7 @@ const ROLE_KEYWORDS = {
   "求人台本制作担当": ["マナの求人", "マナコーポレーション", "求人台本"],
   "広告台本制作担当": ["ミヤビスの広告", "ミヤビス", "広告台本", "広告動画"],
   "TikTok台本制作担当": ["かばやき屋", "かばやきや", "TikTok台本", "運用代行"],
-  "秘書・予定登録・経理担当": ["秘書", "予定", "日程", "撮影日", "空き時間", "カレンダー", "登録", "経理", "請求書", "請求", "支払期限", "請求先", "振込先", "入金"],
+  "請求担当・社長個人予定担当": ["社長", "小林", "個人予定", "予定", "日程", "撮影日", "空き時間", "カレンダー", "登録", "経理", "請求書", "請求", "支払期限", "請求先", "振込先", "入金"],
   "求人TikTok台本担当": ["良心の求人", "良心求人", "良心の求人台本", "良心TikTok求人", "ことは"],
   "TikTok動画編集担当": ["良心の動画編集", "良心動画編集", "TikTok動画編集", "動画編集", "そうた"],
 };
@@ -43,7 +43,7 @@ const TEAMS = [
   { id: "mana_corporation", name: "マナコーポレーション TikTok運用チーム", desc: "採用につながる求人TikTok台本制作", icon: "📣", t: ["#ffae82", "#df5d78"], staff: ["mana_jobs"] },
   { id: "miyabis", name: "ミヤビス TikTok運用チーム", desc: "商品・サービスの広告TikTok台本制作", icon: "📢", t: ["#75c7ee", "#596bd3"], staff: ["miyabis_ads"] },
   { id: "kabayaki", name: "かばやき屋 TikTok運用代行チーム", desc: "", icon: "🎥", t: ["#e8b865", "#9c6837"], staff: ["kabayaki_script"] },
-  { id: "accounting", name: "秘書室", desc: "撮影日程の確認・登録と請求書管理", icon: "💖", t: ["#ff8fc4", "#f0aa45"], staff: ["invoice_clerk"] },
+  { id: "accounting", name: "社長予定・請求管理", desc: "社長の個人予定と請求書を管理", icon: "💖", t: ["#ff8fc4", "#f0aa45"], staff: ["invoice_clerk"] },
   { id: "ryoshin_tiktok", name: "良心 TikTok運用チーム", desc: "求人台本制作とTikTok動画編集", icon: "📱", t: ["#a77de8", "#3f79b8"], staff: ["ryoshin_jobs", "ryoshin_video_editor"] },
 ];
 const SCRIPT_STAFF_IDS = new Set(["elf_sketch", "elf_if", "elf_lively", "elf_jobs", "mana_jobs", "miyabis_ads", "kabayaki_script", "ryoshin_jobs"]);
@@ -6152,7 +6152,7 @@ function calendarConversationId() {
 async function processCalendarInstruction(instruction) {
   const staffId = "invoice_clerk";
   showBubble(staffId, "💬 カレンダーを確認します。", 3200);
-  addLog("📅", "みさきが撮影日程を確認しています");
+  addLog("📅", "みさきが社長の個人予定を確認しています");
   try {
     const response = await fetch("/api/calendar/instruction", {
       method: "POST",
