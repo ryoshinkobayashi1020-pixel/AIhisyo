@@ -6115,7 +6115,22 @@ async function routeAccountingInstruction(instruction) {
     await openAccountingDesk("", "history");
     return;
   }
-  await processAccountingInstructionDirectly(text);
+  if (isInvoiceCreationInstruction(text)) {
+    await processAccountingInstructionDirectly(text);
+    return;
+  }
+  showBubble("invoice_clerk", "💬 日程調整か請求書作成の内容を、もう少し具体的に教えてください。", 7000);
+  addLog("💬", "みさき：請求書作成とは判断しなかったため、作成処理は行いませんでした");
+}
+
+function isInvoiceCreationInstruction(text) {
+  const value = String(text || "");
+  if (value.includes("請求書")) return true;
+  if (/(請求書|請求する|請求を).*(作成|作って|発行|送って|送付|お願い|頼む)|(?:作成|作って|発行|送って).*(請求書|請求)/.test(value)) {
+    return true;
+  }
+  return /(?:運用費|編集費|撮影費|制作費|広告費|業務委託費|請求額|請求金額)/.test(value)
+    && /(?:\d[\d,]*|[一二三四五六七八九十百千万]+)円/.test(value);
 }
 
 function isCalendarSchedulingInstruction(text) {
