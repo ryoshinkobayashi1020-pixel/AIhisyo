@@ -1,11 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { getStoreValue, setStoreValue } from "@/lib/supabaseStore";
 
 export const runtime = "nodejs";
 
-const dataDirectory = path.join(process.cwd(), ".data");
-const settingsFile = path.join(dataDirectory, "staff-settings.json");
-const temporaryFile = path.join(dataDirectory, "staff-settings.tmp.json");
+const STORE_KEY = "staff-settings";
 const allowedFields = ["prompt", "strengths", "weaknesses", "videoEvaluationPrompt"];
 
 function sanitizeSettings(value) {
@@ -25,10 +22,9 @@ function sanitizeSettings(value) {
 
 export async function GET() {
   try {
-    const stored = JSON.parse(await readFile(settingsFile, "utf8"));
+    const stored = await getStoreValue(STORE_KEY);
     return Response.json({ settings: sanitizeSettings(stored) });
   } catch (error) {
-    if (error?.code === "ENOENT") return Response.json({ settings: {} });
     console.error("Staff settings read error:", error);
     return Response.json({ error: "設定を読み込めませんでした。" }, { status: 500 });
   }
@@ -38,9 +34,7 @@ export async function PUT(request) {
   try {
     const body = await request.json();
     const settings = sanitizeSettings(body?.settings);
-    await mkdir(dataDirectory, { recursive: true });
-    await writeFile(temporaryFile, JSON.stringify(settings, null, 2), "utf8");
-    await rename(temporaryFile, settingsFile);
+    await setStoreValue(STORE_KEY, settings);
     return Response.json({ ok: true, settings });
   } catch (error) {
     console.error("Staff settings write error:", error);

@@ -1,26 +1,19 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-import { invoiceDirectory } from "@/lib/accounting";
+import { getInvoiceImageSignedUrl } from "@/lib/supabaseStorage";
 
 export const runtime = "nodejs";
 
 // LINEのMessaging APIが画像を取得するための、公開HTTPS配信用エンドポイント。
-// 認証なし・請求書ID(UUID)をキーにするだけなので、ローカル(.data/invoices)に
-// LINE送信時のみ一時的にコピーした請求書画像しか置かない。
+// 実体はSupabase Storage（非公開バケット）にあるため、ここでは期限付きURLへ
+// リダイレクトするだけにする。認証なし・請求書ID(UUID)をキーにするだけの
+// 単純な作りなので、IDが漏れない限り第三者は中身を知り得ない。
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
     if (!/^[a-f0-9-]{10,60}$/i.test(String(id))) {
       return new Response("Not found", { status: 404 });
     }
-    const filePath = path.join(invoiceDirectory, `${id}.png`);
-    const file = await readFile(filePath);
-    return new Response(file, {
-      headers: {
-        "Content-Type": "image/png",
-        "Cache-Control": "private, max-age=86400",
-      },
-    });
+    const signedUrl = await getInvoiceImageSignedUrl(id, 60 * 10);
+    return Response.redirect(signedUrl, 302);
   } catch {
     return new Response("Not found", { status: 404 });
   }

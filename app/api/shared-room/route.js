@@ -1,10 +1,10 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { getStoreValue, setStoreValue } from "@/lib/supabaseStore";
 
 export const runtime = "nodejs";
 
-const directory = path.join(process.cwd(), ".data");
-const stateFile = path.join(directory, "shared-room.json");
+const STORE_KEY = "shared-room";
+// サーバーレス環境では複数インスタンスに分かれるため、このキューは同一インスタンス内の
+// 連続リクエストの競合を減らす程度の役割（完全な排他制御ではない）。
 let writeQueue = Promise.resolve();
 
 function emptyState() {
@@ -12,12 +12,8 @@ function emptyState() {
 }
 
 async function readState() {
-  try {
-    return { ...emptyState(), ...JSON.parse(await readFile(stateFile, "utf8")) };
-  } catch (error) {
-    if (error?.code === "ENOENT") return emptyState();
-    throw error;
-  }
+  const stored = await getStoreValue(STORE_KEY);
+  return { ...emptyState(), ...(stored || {}) };
 }
 
 async function mutateState(mutator) {
@@ -30,10 +26,7 @@ async function mutateState(mutator) {
       Object.entries(state.presence || {}).filter(([, participant]) => now - Number(participant.seenAt || 0) < 15000),
     );
     state.events = (state.events || []).filter(event => now - Number(event.createdAt || 0) < 10 * 60 * 1000).slice(-100);
-    await mkdir(directory, { recursive: true });
-    const temporaryFile = `${stateFile}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporaryFile, JSON.stringify(state, null, 2), "utf8");
-    await rename(temporaryFile, stateFile);
+    await setStoreValue(STORE_KEY, state);
   });
   await writeQueue;
   return result;

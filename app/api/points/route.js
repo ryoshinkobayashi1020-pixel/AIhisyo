@@ -1,11 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { getStoreValue, setStoreValue } from "@/lib/supabaseStore";
 
 export const runtime = "nodejs";
 
-const directory = path.join(process.cwd(), ".data");
-const pointsFile = path.join(directory, "points.json");
-const temporaryFile = path.join(directory, "points.tmp.json");
+const STORE_KEY = "points";
 
 function currentGrantMonth() {
   const tokyoParts = new Intl.DateTimeFormat("en-CA", {
@@ -50,15 +47,13 @@ function applyMonthlyGrant(points) {
 
 export async function GET() {
   try {
-    const granted = applyMonthlyGrant(sanitize(JSON.parse(await readFile(pointsFile, "utf8"))));
-    if (granted.changed) {
-      await mkdir(directory, { recursive: true });
-      await writeFile(temporaryFile, JSON.stringify(granted.points, null, 2), "utf8");
-      await rename(temporaryFile, pointsFile);
-    }
+    const stored = await getStoreValue(STORE_KEY);
+    if (!stored) return Response.json({ points: null });
+    const granted = applyMonthlyGrant(sanitize(stored));
+    if (granted.changed) await setStoreValue(STORE_KEY, granted.points);
     return Response.json({ points: granted.points });
   } catch (error) {
-    if (error?.code === "ENOENT") return Response.json({ points: null });
+    console.error("Points read error:", error);
     return Response.json({ error: "ポイントを読み込めませんでした。" }, { status: 500 });
   }
 }
@@ -66,11 +61,10 @@ export async function GET() {
 export async function PUT(request) {
   try {
     const points = applyMonthlyGrant(sanitize((await request.json())?.points)).points;
-    await mkdir(directory, { recursive: true });
-    await writeFile(temporaryFile, JSON.stringify(points, null, 2), "utf8");
-    await rename(temporaryFile, pointsFile);
+    await setStoreValue(STORE_KEY, points);
     return Response.json({ ok: true, points });
-  } catch {
+  } catch (error) {
+    console.error("Points write error:", error);
     return Response.json({ error: "ポイントを保存できませんでした。" }, { status: 500 });
   }
 }
@@ -83,24 +77,18 @@ export async function POST(request) {
     if (!amount || (winnerId !== "you" && !/^[a-z0-9_-]{1,40}$/i.test(winnerId))) {
       return Response.json({ error: "ポイント加算の内容が正しくありません。" }, { status: 400 });
     }
-    let points;
-    try {
-      points = sanitize(JSON.parse(await readFile(pointsFile, "utf8")));
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-      points = sanitize({});
-    }
+    const stored = await getStoreValue(STORE_KEY);
+    let points = sanitize(stored || {});
     points = applyMonthlyGrant(points).points;
     if (winnerId === "you") {
       points.owner = Math.min(100000000, points.owner + amount);
     } else {
       points.staff[winnerId] = Math.min(100000000, (points.staff[winnerId] || 0) + amount);
     }
-    await mkdir(directory, { recursive: true });
-    await writeFile(temporaryFile, JSON.stringify(points, null, 2), "utf8");
-    await rename(temporaryFile, pointsFile);
+    await setStoreValue(STORE_KEY, points);
     return Response.json({ ok: true, points });
-  } catch {
+  } catch (error) {
+    console.error("Points grant error:", error);
     return Response.json({ error: "勝利ポイントを加算できませんでした。" }, { status: 500 });
   }
 }

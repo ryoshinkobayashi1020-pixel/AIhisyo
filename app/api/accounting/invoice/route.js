@@ -1,49 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { access, copyFile, readFile, unlink } from "node:fs/promises";
-import { spawn } from "node:child_process";
-import path from "node:path";
 import {
-  invoiceDirectory,
   loadAccountingData,
   nextInvoiceNumber,
   sanitizeFilename,
   saveAccountingData,
 } from "@/lib/accounting";
 import { sendInvoiceEmail, sendInvoiceLine } from "@/lib/notify";
+import { uploadInvoiceImage, getInvoiceImageSignedUrl, downloadInvoiceImage } from "@/lib/supabaseStorage";
+import { renderInvoiceImage } from "@/lib/renderInvoice";
 
 export const runtime = "nodejs";
-
-const pythonCandidates = [
-  process.env.ACCOUNTING_PYTHON,
-  "/Users/apple/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",
-  "/usr/local/bin/python3",
-  "/usr/bin/python3",
-].filter(Boolean);
-
-async function findPython() {
-  for (const candidate of pythonCandidates) {
-    try {
-      await access(candidate);
-      return candidate;
-    } catch {
-      // 次の候補を確認
-    }
-  }
-  throw new Error("請求書画像の生成に必要な実行環境が見つかりません。");
-}
-
-function runImageGenerator(python, outputPath, payload) {
-  return new Promise((resolve, reject) => {
-    const script = path.join(process.cwd(), "scripts", "render_invoice_image.py");
-    const template = path.join(process.cwd(), "assets", "invoice-template.png");
-    const child = spawn(python, [script, template, outputPath], { stdio: ["pipe", "pipe", "pipe"] });
-    let errorText = "";
-    child.stderr.on("data", chunk => { errorText += chunk.toString(); });
-    child.on("error", reject);
-    child.on("close", code => code === 0 ? resolve() : reject(new Error(errorText || `画像生成が終了コード${code}で失敗しました。`)));
-    child.stdin.end(JSON.stringify(payload));
-  });
-}
 
 function calculate(items, taxMode, discount, taxRate) {
   const raw = items.reduce((sum, item) => sum + Number(item.amount || (item.quantity * item.unitPrice) || 0), 0);
@@ -96,7 +62,6 @@ export async function POST(request) {
       filename = `${baseName}_${String(suffix).padStart(2, "0")}.png`;
       suffix += 1;
     }
-    const outputPath = path.join(invoiceDirectory, filename);
     const invoice = {
       id,
       invoiceNumber,
@@ -127,8 +92,7 @@ export async function POST(request) {
       feeNote: data.invoiceSettings.feeNote,
       note: [body.period ? `対象期間：${body.period}` : "", body.closingDate ? `締め日：${body.closingDate}` : "", body.note || data.invoiceSettings.defaultNote].filter(Boolean).join("\n"),
     };
-    await runImageGenerator(await findPython(), outputPath, pdfPayload);
-    const image = await readFile(outputPath);
+    const image = await renderInvoiceImage(pdfPayload);
 
     // send channels: explicit request override, otherwise whatever the client has registered
     const requestedChannels = Array.isArray(body.sendChannels) ? body.sendChannels : null;
@@ -151,28 +115,35 @@ export async function POST(request) {
         filename,
       });
     }
-    const publicBaseUrl = process.env.PUBLIC_BASE_URL;
     if (needsServerCopy) {
       // normal flow keeps everything browser-side only (IndexedDB vault) and
-      // deletes the temp render; this path persists a copy instead.
-      const persistedPath = path.join(invoiceDirectory, `${id}.png`);
-      await copyFile(outputPath, persistedPath).catch(() => {});
-      invoice.filePath = persistedPath;
-      invoice.storage = "server-file";
+      // deletes the temp render; this path uploads a copy to Supabase Storage
+      // instead, since Vercel's local disk doesn't persist between requests.
+      try {
+        invoice.filePath = await uploadInvoiceImage(id, image);
+        invoice.storage = "supabase-storage";
+      } catch (error) {
+        console.error("Invoice storage upload error:", error);
+      }
     }
     if (wantsLine) {
+      let imageUrl = "";
+      try {
+        imageUrl = invoice.filePath ? await getInvoiceImageSignedUrl(id) : "";
+      } catch (error) {
+        console.error("Invoice signed URL error:", error);
+      }
       sendResults.line = await sendInvoiceLine({
         lineUserId: client.lineUserId,
         clientName: client.companyName,
         invoiceNumber: invoice.invoiceNumber,
         total: totals.total,
         dueDate: invoice.dueDate,
-        imageUrl: publicBaseUrl ? `${publicBaseUrl.replace(/\/$/, "")}/api/accounting/invoice-file/${id}` : "",
+        imageUrl,
       });
     }
     invoice.sendResults = sendResults;
 
-    await unlink(outputPath).catch(() => {});
     data.invoices.unshift(invoice);
     await saveAccountingData(data);
     return Response.json({
@@ -196,7 +167,7 @@ export async function GET(request) {
     if (!invoice.filePath) {
       return Response.json({ error: "この請求書は完成物保管庫からダウンロードしてください。" }, { status: 410 });
     }
-    const file = await readFile(invoice.filePath);
+    const file = await downloadInvoiceImage(invoice.id);
     const isImage = String(invoice.filename).toLowerCase().endsWith(".png");
     return new Response(file, {
       headers: {
