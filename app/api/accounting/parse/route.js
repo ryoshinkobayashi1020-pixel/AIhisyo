@@ -214,6 +214,8 @@ ${JSON.stringify(registeredClientSummary(activeClients), null, 2)}
       clientId: client?.id || "",
       clientQuery: client?.companyName || parsed.clientSpokenName || "",
       contactName: client?.contactName || "",
+      lineTargetId: client?.lineUserId || "",
+      lineTargetType: client?.lineTargetType || "",
       invoiceDate,
       dueDate,
       closingDate: validDate(parsed.closingDate),

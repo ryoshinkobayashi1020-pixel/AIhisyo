@@ -92,6 +92,13 @@ async function handleMisakiMessage(origin, text, source = {}) {
   ) {
     return "このLINEトークを請求書の送信先として登録しました。";
   }
+  if (
+    source.type === "user"
+    && parsed.clientId
+    && !parsed.lineTargetId
+  ) {
+    return `${parsed.clientQuery || "この請求先"}のLINE送信先がまだ登録されていません。送信したいLINEグループで「このグループを${parsed.clientQuery || "この請求先"}の請求書送信先に登録」と送ってください。`;
+  }
 
   const missing = [];
   if (!parsed.clientId) missing.push("登録済みの請求先（会社名・呼び名）");
@@ -132,7 +139,9 @@ async function handleMisakiMessage(origin, text, source = {}) {
   }
 
   return {
-    imageUrl: result.imageUrl || "",
+    // 個人トークからの指示では、請求書画像は登録済み送信先へpushする。
+    // 依頼者個人へは確認文だけを返し、請求書画像を重複送信しない。
+    imageUrl: ["group", "room"].includes(source.type) ? (result.imageUrl || "") : "",
     text: "いつもお世話になっております。請求書をお送りいたしますので、ご確認をお願いいたします。",
   };
 }
