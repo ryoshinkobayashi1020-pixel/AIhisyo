@@ -57,6 +57,27 @@ function getLineSourceTarget(source = {}) {
   return { targetId: source.userId || "", targetType: "user" };
 }
 
+function isCalendarInstruction(text) {
+  const value = String(text || "");
+  return /(撮影|日程|予定|空き|空いて|カレンダー|何時|何日)/.test(value)
+    && !/(請求書|請求先|振込先|入金)/.test(value);
+}
+
+async function handleCalendarMessage(origin, text, source = {}) {
+  const { targetId, targetType } = getLineSourceTarget(source);
+  const response = await fetch(`${origin}/api/calendar/instruction`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      instruction: text,
+      conversationId: `line-${targetType}-${targetId}`,
+    }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return result.error || "Googleカレンダーを確認できませんでした。";
+  return result.message;
+}
+
 async function registerLineGroupTarget(origin, clientId, source) {
   const { targetId, targetType } = getLineSourceTarget(source);
   if (!clientId || !targetId || !["group", "room"].includes(targetType)) return;
@@ -171,7 +192,9 @@ export async function POST(request) {
     if (!["user", "group", "room"].includes(event.source?.type)) continue;
 
     try {
-      const reply = await handleMisakiMessage(origin, event.message.text, event.source);
+      const reply = isCalendarInstruction(event.message.text)
+        ? await handleCalendarMessage(origin, event.message.text, event.source)
+        : await handleMisakiMessage(origin, event.message.text, event.source);
       if (reply?.skipReply) continue;
       if (typeof reply === "string") {
         await replyLine(event.replyToken, reply);

@@ -793,6 +793,12 @@ export default function Home() {
                 <div className="two-cols"><label>消費税率<input id="invoiceDefaultTaxRate" type="number" /></label><label>請求番号接頭文字<input id="invoiceNumberPrefix" /></label></div>
                 <label>振込手数料の定型文<textarea id="invoiceFeeNote" rows={3}></textarea></label>
               </div>
+              <div className="accounting-card">
+                <h4>Googleカレンダー連携</h4>
+                <p>みさきが撮影日の空き確認と、確定した撮影予定の登録を行います。</p>
+                <p id="calendarConnectionStatus" aria-live="polite">接続状態を確認しています…</p>
+                <a className="btn-primary calendar-connect-button" id="calendarConnectButton" href="/api/calendar/auth">Googleカレンダーに接続</a>
+              </div>
             </div>
             <button type="button" className="btn-done-lg accounting-save-settings" id="accountingSaveSettings">設定を保存</button>
           </section>
@@ -804,7 +810,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260728-line-group-routing" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260729-google-calendar" strategy="afterInteractive" />
     </>
   );
 }

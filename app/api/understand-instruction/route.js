@@ -12,7 +12,7 @@ const STAFF = [
   ["mana_jobs", "マナコーポレーションの求人TikTok台本制作"],
   ["miyabis_ads", "ミヤビスの広告TikTok台本制作"],
   ["kabayaki_script", "かばやき屋のTikTok運用代行・台本制作"],
-  ["invoice_clerk", "合同会社良心の経理・請求書画像作成・請求先管理"],
+  ["invoice_clerk", "合同会社良心の経理・請求書画像作成・請求先管理・Googleカレンダーで撮影日程の空き確認と予定登録"],
   ["ryoshin_jobs", "合同会社良心の求人TikTok台本制作"],
   ["ryoshin_video_editor", "合同会社良心のTikTok動画編集・編集指示制作"],
 ];

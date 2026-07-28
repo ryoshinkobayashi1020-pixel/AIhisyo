@@ -2031,7 +2031,7 @@ function findLocallyCalledStaff(staffId, text) {
     && /(広告|宣伝|台本)/.test(normalized)) return STAFF.find(staff => staff.id === "miyabis_ads");
   if (/(かばやき屋|かばやきや)/.test(normalized)
     && /(tiktok|台本|動画|運用)/.test(normalized)) return STAFF.find(staff => staff.id === "kabayaki_script");
-  if (/(みさき|経理|請求書|請求先|振込先|入金)/.test(normalized)) {
+  if (/(みさき|経理|請求書|請求先|振込先|入金|撮影日|撮影予定|空き時間|空いてる|空いている|カレンダー)/.test(normalized)) {
     return STAFF.find(staff => staff.id === "invoice_clerk");
   }
   return STAFF.find(staff => {
@@ -2143,7 +2143,7 @@ async function handleInstructionSubmit(staffId, text) {
   const trimmed = text.trim();
   const locallyCalledStaff = findLocallyCalledStaff(staffId, trimmed);
 
-  if (locallyCalledStaff?.id === "invoice_clerk" || (!staffId && /(請求書|請求先|経理|振込先)/.test(trimmed))) {
+  if (locallyCalledStaff?.id === "invoice_clerk" || (!staffId && /(請求書|請求先|経理|振込先|撮影日|撮影予定|空き時間|空いて|カレンダー)/.test(trimmed))) {
     await routeAccountingInstruction(trimmed);
     return;
   }
@@ -5754,6 +5754,7 @@ async function openAccountingDesk(initialInstruction = "", initialTab = "clients
   const invoiceDueDate = document.getElementById("invoiceDueDate");
   if (invoiceDate && !invoiceDate.value) invoiceDate.value = accountingToday();
   if (invoiceDueDate && !invoiceDueDate.value) invoiceDueDate.value = accountingNextMonthEnd();
+  await updateCalendarConnectionStatus();
 }
 
 function closeAccountingDesk() {
@@ -6097,6 +6098,11 @@ async function archiveAccountingInvoice(result) {
 
 async function routeAccountingInstruction(instruction) {
   const text = String(instruction || "").trim();
+  if (/(撮影|日程|予定|空き|空いて|カレンダー|何時|何日)/.test(text)
+    && !/(請求書|請求先|振込先|入金)/.test(text)) {
+    await processCalendarInstruction(text);
+    return;
+  }
   if (/(請求先管理|顧客管理|送り先.*登録|請求先.*登録|顧客.*登録)/.test(text)) {
     await openAccountingDesk("", "clients");
     return;
@@ -6110,6 +6116,63 @@ async function routeAccountingInstruction(instruction) {
     return;
   }
   await processAccountingInstructionDirectly(text);
+}
+
+function calendarConversationId() {
+  const key = "ai-office-calendar-conversation-id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+async function processCalendarInstruction(instruction) {
+  const staffId = "invoice_clerk";
+  showBubble(staffId, "💬 カレンダーを確認します。", 3200);
+  addLog("📅", "みさきが撮影日程を確認しています");
+  try {
+    const response = await fetch("/api/calendar/instruction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instruction,
+        conversationId: calendarConversationId(),
+      }),
+    });
+    const result = await readAccountingJson(response, "Googleカレンダーを確認できませんでした。");
+    if (!response.ok) throw new Error(result.error || "Googleカレンダーを確認できませんでした。");
+    showBubble(staffId, `💬 ${result.message}`, 10000);
+    addLog(result.booked ? "✅" : "📅", `みさき：${result.message}`);
+    speak(result.message, STAFF.findIndex(staff => staff.id === staffId));
+  } catch (error) {
+    showBubble(staffId, `💬 ${error.message}`, 9000);
+    addLog("⚠️", `カレンダー連携エラー：${error.message}`);
+  }
+}
+
+async function updateCalendarConnectionStatus() {
+  const status = document.getElementById("calendarConnectionStatus");
+  const button = document.getElementById("calendarConnectButton");
+  if (!status || !button) return;
+  try {
+    const response = await fetch("/api/calendar/status");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "接続状態を確認できません。");
+    if (result.connected) {
+      status.textContent = `接続済み：${result.calendarId}`;
+      button.textContent = "Googleカレンダーを再接続";
+    } else if (result.configured) {
+      status.textContent = "環境設定済み・Googleアカウントの接続待ち";
+      button.textContent = "Googleカレンダーに接続";
+    } else {
+      status.textContent = "Googleカレンダーの環境変数が不足しています";
+      button.textContent = "設定を確認";
+    }
+  } catch {
+    status.textContent = "接続状態を確認できませんでした";
+  }
 }
 
 async function processAccountingInstructionDirectly(instruction) {
@@ -6294,6 +6357,21 @@ document.getElementById("deleteAccountingClient")?.addEventListener("click", asy
   }
 });
 document.getElementById("accountingSaveSettings")?.addEventListener("click", saveAccountingSettings);
+
+const calendarCallbackState = new URLSearchParams(window.location.search).get("calendar");
+if (calendarCallbackState) {
+  window.history.replaceState({}, "", window.location.pathname);
+  window.setTimeout(async () => {
+    await openAccountingDesk("", "settings");
+    const message = calendarCallbackState === "connected"
+      ? "Googleカレンダーと接続しました。"
+      : calendarCallbackState === "denied"
+        ? "Googleカレンダーへの接続がキャンセルされました。"
+        : "Googleカレンダーへの接続に失敗しました。";
+    showBubble("invoice_clerk", `💬 ${message}`, 7000);
+    addLog(calendarCallbackState === "connected" ? "✅" : "⚠️", message);
+  }, 300);
+}
 document.getElementById("accountingHistoryList")?.addEventListener("change", async event => {
   if (!event.target.matches("[data-invoice-status]")) return;
   await fetch("/api/accounting", {
