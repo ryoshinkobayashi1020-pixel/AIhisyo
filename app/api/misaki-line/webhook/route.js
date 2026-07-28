@@ -4,15 +4,6 @@ export const runtime = "nodejs";
 
 const ONLINE_SCHEDULING_URL = "https://app.aitemasu.me/ev/57pzl1w1rtsx";
 
-function internalJsonHeaders() {
-  return {
-    "Content-Type": "application/json",
-    ...(process.env.LINE_CHANNEL_SECRET
-      ? { "x-ai-office-internal": process.env.LINE_CHANNEL_SECRET }
-      : {}),
-  };
-}
-
 // LINEからのWebhookは「x-line-signature」ヘッダーで署名されている。
 // チャネルシークレットで検証しないと、誰でも偽のリクエストを送れてしまう。
 function verifySignature(rawBody, signature, secret) {
@@ -145,7 +136,7 @@ async function handleCalendarMessage(origin, text, source = {}) {
   const { targetId, targetType } = getLineSourceTarget(source);
   const response = await fetch(`${origin}/api/calendar/instruction`, {
     method: "POST",
-    headers: internalJsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       instruction: text,
       conversationId: `line-${targetType}-${targetId}`,
@@ -161,7 +152,7 @@ async function registerLineGroupTarget(origin, clientId, source) {
   if (!clientId || !targetId || !["group", "room"].includes(targetType)) return;
   const response = await fetch(`${origin}/api/accounting`, {
     method: "POST",
-    headers: internalJsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action: "set-line-target", clientId, targetId, targetType }),
   });
   if (!response.ok) {
@@ -173,7 +164,7 @@ async function registerLineGroupTarget(origin, clientId, source) {
 async function handleMisakiMessage(origin, text, source = {}) {
   const parseResponse = await fetch(`${origin}/api/accounting/parse`, {
     method: "POST",
-    headers: internalJsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ instruction: text }),
   });
   const parsed = await parseResponse.json().catch(() => ({}));
@@ -212,7 +203,7 @@ async function handleMisakiMessage(origin, text, source = {}) {
 
   const invoiceResponse = await fetch(`${origin}/api/accounting/invoice`, {
     method: "POST",
-    headers: internalJsonHeaders(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       clientId: parsed.clientId,
       invoiceDate: parsed.invoiceDate,
