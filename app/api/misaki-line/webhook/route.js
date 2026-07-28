@@ -79,7 +79,7 @@ function meetingMode(text) {
 
 function shouldHandleGroupMessage(text) {
   const value = String(text || "");
-  return value.includes("請求書") || isCalendarInstruction(value) || Boolean(meetingMode(value));
+  return value.includes("請求書");
 }
 
 function onlineMeetingReply() {
@@ -221,26 +221,29 @@ export async function POST(request) {
       ["group", "room"].includes(event.source.type)
       && !shouldHandleGroupMessage(event.message.text)
     ) {
-      // グループの通常会話には参加しない。日程確認・確定、または
+      // LINEグループでは日程調整を行わない。
       // 「請求書」を含む明示的な依頼だけを秘書みさきが処理する。
       continue;
     }
 
     try {
-      const mode = meetingMode(event.message.text);
-      const reply = mode === "online"
-        ? onlineMeetingReply()
-        : mode === "unspecified"
-          ? unspecifiedMeetingReply()
-          : mode === "offline"
-            ? await handleCalendarMessage(
-              origin,
-              `${event.message.text}\n開始日から7日間で、空いている候補を3つ出してください。`,
-              event.source
-            )
-            : isCalendarInstruction(event.message.text)
-              ? await handleCalendarMessage(origin, event.message.text, event.source)
-              : await handleMisakiMessage(origin, event.message.text, event.source);
+      const text = event.message.text;
+      const mode = meetingMode(text);
+      const reply = text.includes("請求書")
+        ? await handleMisakiMessage(origin, text, event.source)
+        : mode === "online"
+          ? onlineMeetingReply()
+          : mode === "unspecified"
+            ? unspecifiedMeetingReply()
+            : mode === "offline"
+              ? await handleCalendarMessage(
+                origin,
+                `${text}\n開始日から7日間で、空いている候補を3つ出してください。`,
+                event.source
+              )
+              : isCalendarInstruction(text)
+                ? await handleCalendarMessage(origin, text, event.source)
+                : await handleMisakiMessage(origin, text, event.source);
       if (reply?.skipReply) continue;
       if (typeof reply === "string") {
         await replyLine(event.replyToken, reply);
