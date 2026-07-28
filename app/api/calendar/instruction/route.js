@@ -87,6 +87,7 @@ action:
 - 「今日」「明日」「来週」などは現在日時を基準にする
 - startIsoは日時が一意に決まる場合だけ、+09:00付きISO 8601で入れる
 - bookで時刻だけ言われた場合、直前候補から一致する候補が1件なら、その完全な日時をstartIsoへ入れる
+- 「1つ目で」「2番目で」「3番で」などはbookとして扱い、直前候補の該当日時をstartIsoへ入れる
 - eventTypeは撮影ならshooting、打ち合わせ・会議・面談ならmeeting、それ以外または不明ならother
 - durationMinutesは撮影なら120、打ち合わせ・会議・面談なら60、明示された所要時間があればその分数。不明なら60
 - startIsoには開始時刻だけを入れる
@@ -216,6 +217,15 @@ export async function POST(request) {
     }
 
     if (parsed.action === "book") {
+      if (!startIso && pending?.options?.length) {
+        const ordinalMatch = instruction.match(/(?:^|\D)([123１２３一二三])(?:つ目|番目|番)/);
+        const ordinalIndex = ordinalMatch
+          ? { "1": 0, "１": 0, "一": 0, "2": 1, "２": 1, "二": 1, "3": 2, "３": 2, "三": 2 }[ordinalMatch[1]]
+          : -1;
+        if (ordinalIndex >= 0 && pending.options[ordinalIndex]) {
+          startIso = validStart(pending.options[ordinalIndex].startIso);
+        }
+      }
       if (!startIso && pending?.options?.length === 1) startIso = validStart(pending.options[0].startIso);
       if (!startIso) {
         return Response.json({ action: "clarify", message: "登録する日付と開始時刻をもう一度教えてください。" });

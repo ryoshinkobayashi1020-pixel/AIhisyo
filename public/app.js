@@ -2144,7 +2144,7 @@ async function handleInstructionSubmit(staffId, text) {
   const trimmed = text.trim();
   const locallyCalledStaff = findLocallyCalledStaff(staffId, trimmed);
 
-  if (locallyCalledStaff?.id === "invoice_clerk" || (!staffId && /(請求書|請求先|経理|振込先|撮影日|撮影予定|空き時間|空いて|カレンダー)/.test(trimmed))) {
+  if (locallyCalledStaff?.id === "invoice_clerk" || (!staffId && (/(請求書|請求先|経理|振込先)/.test(trimmed) || isCalendarSchedulingInstruction(trimmed)))) {
     await routeAccountingInstruction(trimmed);
     return;
   }
@@ -6099,8 +6099,7 @@ async function archiveAccountingInvoice(result) {
 
 async function routeAccountingInstruction(instruction) {
   const text = String(instruction || "").trim();
-  if (/(撮影|日程|予定|空き|空いて|カレンダー|何時|何日)/.test(text)
-    && !/(請求書|請求先|振込先|入金)/.test(text)) {
+  if (isCalendarSchedulingInstruction(text)) {
     await processCalendarInstruction(text);
     return;
   }
@@ -6117,6 +6116,12 @@ async function routeAccountingInstruction(instruction) {
     return;
   }
   await processAccountingInstructionDirectly(text);
+}
+
+function isCalendarSchedulingInstruction(text) {
+  const value = String(text || "");
+  return /(撮影|打ち合わせ|打合せ|面談|ミーティング|日程|予定|空き|空いて|カレンダー|何時|何日|いつ(?:にします|がいい|が空いて|空いて|なら)|(?:この|その)(?:時間|日時|日程|候補)で|(?:1|１|一|2|２|二|3|３|三)(?:つ目|番目|番)で|\d{1,2}月\d{1,2}日.*\d{1,2}時|\d{1,2}時(?:半)?(?:で|から).*(?:お願い|決定|確定))/.test(value)
+    && !/(請求書|請求先|振込先|入金)/.test(value);
 }
 
 function calendarConversationId() {
