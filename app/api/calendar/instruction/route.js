@@ -1,5 +1,7 @@
 import {
   createCalendarEvent,
+  deleteCalendarEvent,
+  findCalendarEvents,
   isCalendarSlotAvailable,
   loadCalendarConversation,
   saveCalendarConversation,
@@ -14,7 +16,7 @@ const INSTRUCTION_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
-    action: { type: "string", enum: ["check", "suggest", "book", "clarify"] },
+    action: { type: "string", enum: ["check", "suggest", "book", "cancel", "clarify"] },
     startIso: { type: "string" },
     title: { type: "string" },
     clientName: { type: "string" },
@@ -81,6 +83,7 @@ action:
 - check: 特定の日時が空いているか質問している
 - suggest: 空いている日や時間を複数聞いている
 - book: 「その時間で」「15時で」「そこに決定」など、日時を確定して予定登録を頼んでいる
+- cancel: 登録済みの予定をキャンセル、取り消し、削除したい
 - clarify: 日程に関係しない、または判断不能
 
 ルール:
@@ -88,6 +91,7 @@ action:
 - startIsoは日時が一意に決まる場合だけ、+09:00付きISO 8601で入れる
 - bookで時刻だけ言われた場合、直前候補から一致する候補が1件なら、その完全な日時をstartIsoへ入れる
 - 「1つ目で」「2番目で」「3番で」などはbookとして扱い、直前候補の該当日時をstartIsoへ入れる
+- cancelでは、日時が分かる場合はstartIso、予定名や相手名が分かる場合はtitleまたはclientNameへ入れる
 - eventTypeは撮影ならshooting、打ち合わせ・会議・面談ならmeeting、それ以外または不明ならother
 - durationMinutesは撮影なら120、打ち合わせ・会議・面談なら60、明示された所要時間があればその分数。不明なら60
 - startIsoには開始時刻だけを入れる
@@ -168,6 +172,56 @@ export async function POST(request) {
     const eventType = parsed.eventType || pending?.eventType || "other";
     const durationMinutes = Math.min(240, Math.max(30, Number(parsed.durationMinutes) || (eventType === "shooting" ? 120 : 60)));
     const travelMinutes = eventType === "shooting" ? 60 : 0;
+
+    if (parsed.action === "cancel") {
+      const refersToRecentEvent = /(この|その|さっき|先ほど|今|登録した)?予定.*(?:キャンセル|取消|取り消|削除)|(?:キャンセル|取消|取り消|削除)(?:して|お願い)?$/.test(instruction);
+      if (pending?.eventId && refersToRecentEvent) {
+        await deleteCalendarEvent(pending.eventId);
+        const cancelledTitle = pending.title || "予定";
+        await saveCalendarConversation(conversationId, {
+          action: "cancelled",
+          title: cancelledTitle,
+          options: [],
+          eventId: "",
+        });
+        return Response.json({
+          action: "cancel",
+          cancelled: true,
+          message: `Googleカレンダーの「${cancelledTitle}」をキャンセルしました。`,
+        });
+      }
+
+      const query = [parsed.clientName, parsed.title]
+        .map(value => String(value || "").trim())
+        .find(value => value && !["予定", "撮影", "打ち合わせ", "会議", "面談"].includes(value)) || "";
+      const events = await findCalendarEvents({ startIso, query, maxResults: 10 });
+      if (!events.length) {
+        return Response.json({
+          action: "cancel",
+          cancelled: false,
+          message: "該当する予定が見つかりませんでした。予定名と日付・開始時刻を教えてください。",
+        });
+      }
+      if (events.length > 1) {
+        const candidates = events.slice(0, 3).map(event => {
+          const eventStart = event.start?.dateTime || event.start?.date || "";
+          return `${formatJapanese(eventStart)}「${event.summary || "予定"}」`;
+        });
+        return Response.json({
+          action: "cancel",
+          cancelled: false,
+          message: `予定が複数見つかりました。キャンセルする予定の日付と開始時刻を教えてください。\n${candidates.join("\n")}`,
+        });
+      }
+
+      const [event] = events;
+      await deleteCalendarEvent(event.id);
+      return Response.json({
+        action: "cancel",
+        cancelled: true,
+        message: `${formatJapanese(event.start?.dateTime || event.start?.date)}の「${event.summary || "予定"}」をキャンセルしました。`,
+      });
+    }
 
     if (parsed.action === "suggest") {
       const baseDate = /来週以降/.test(instruction)
