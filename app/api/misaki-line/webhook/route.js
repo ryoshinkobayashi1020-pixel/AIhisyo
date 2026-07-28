@@ -59,8 +59,13 @@ function getLineSourceTarget(source = {}) {
 
 function isCalendarInstruction(text) {
   const value = String(text || "");
-  return /(撮影|日程|予定|空き|空いて|カレンダー|何時|何日)/.test(value)
+  return /(空いて|空き(?:の日|時間)|可能(?:ですか|でしょうか|な日|な時間)|都合(?:は|の良い)|いつ(?:なら)?可能|何日(?:が|なら)?.*可能|何時(?:が|なら)?.*可能|日程(?:を|の)?(?:確認|相談)|撮影日(?:を|の)?(?:確認|相談)|(?:この|その)(?:時間|日時|日程)で|\d{1,2}時(?:半)?(?:で|から).*(?:お願い|決定|確定))/.test(value)
     && !/(請求書|請求先|振込先|入金)/.test(value);
+}
+
+function shouldHandleGroupMessage(text) {
+  const value = String(text || "");
+  return value.includes("請求書") || isCalendarInstruction(value);
 }
 
 async function handleCalendarMessage(origin, text, source = {}) {
@@ -190,6 +195,14 @@ export async function POST(request) {
   for (const event of events) {
     if (event.type !== "message" || event.message?.type !== "text") continue;
     if (!["user", "group", "room"].includes(event.source?.type)) continue;
+    if (
+      ["group", "room"].includes(event.source.type)
+      && !shouldHandleGroupMessage(event.message.text)
+    ) {
+      // グループの通常会話には参加しない。日程確認・確定、または
+      // 「請求書」を含む明示的な依頼だけを秘書みさきが処理する。
+      continue;
+    }
 
     try {
       const reply = isCalendarInstruction(event.message.text)
