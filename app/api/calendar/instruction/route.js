@@ -82,7 +82,7 @@ async function understandInstruction(text, pending) {
 action:
 - check: 特定の日時が空いているか質問している
 - suggest: 空いている日や時間を複数聞いている
-- book: 「その時間で」「15時で」「そこに決定」など、日時を確定して予定登録を頼んでいる
+- book: 「その時間で」「15時で」「そこに決定」「予定を追加して」「カレンダーに登録して」「打ち合わせを入れて」など、日時を確定して予定登録を頼んでいる
 - cancel: 登録済みの予定をキャンセル、取り消し、削除したい
 - clarify: 日程に関係しない、または判断不能
 
@@ -168,6 +168,8 @@ export async function POST(request) {
 
     const pending = await loadCalendarConversation(conversationId);
     const parsed = await understandInstruction(instruction, pending);
+    const explicitBooking = /(?:予定|撮影|打ち合わせ|打合せ|面談|カレンダー).*(?:追加して|登録して|入れて|入れといて)|(?:この|その)(?:時間|日時|日程|候補)で(?:お願い)?|(?:1|１|一|2|２|二|3|３|三)(?:つ目|番目|番)で(?:お願い)?|\d{1,2}時(?:半)?で(?:お願い)?$/.test(instruction);
+    if (explicitBooking) parsed.action = "book";
     let startIso = validStart(parsed.startIso);
     const eventType = parsed.eventType || pending?.eventType || "other";
     const durationMinutes = Math.min(240, Math.max(30, Number(parsed.durationMinutes) || (eventType === "shooting" ? 120 : 60)));
