@@ -82,6 +82,14 @@ function shouldHandleGroupMessage(text) {
   return value.includes("請求書");
 }
 
+function isMisakiMentioned(event) {
+  const mentionees = event.message?.mention?.mentionees;
+  if (Array.isArray(mentionees) && mentionees.some(mention => mention?.type === "user" && mention?.isSelf === true)) {
+    return true;
+  }
+  return /[@＠]\s*(?:みさき|ミサキ|秘書みさき)/.test(String(event.message?.text || ""));
+}
+
 function onlineMeetingReply() {
   return `オンラインでのお打ち合わせは、こちらから日程調整をお願いいたします。\n${ONLINE_SCHEDULING_URL}`;
 }
@@ -219,10 +227,10 @@ export async function POST(request) {
     if (!["user", "group", "room"].includes(event.source?.type)) continue;
     if (
       ["group", "room"].includes(event.source.type)
-      && !shouldHandleGroupMessage(event.message.text)
+      && !(isMisakiMentioned(event) && shouldHandleGroupMessage(event.message.text))
     ) {
-      // LINEグループでは日程調整を行わない。
-      // 「請求書」を含む明示的な依頼だけを秘書みさきが処理する。
+      // LINEグループでは日程調整を行わない。請求書の指示も、
+      // みさきが明示的に＠メンションされた場合だけ処理する。
       continue;
     }
 
