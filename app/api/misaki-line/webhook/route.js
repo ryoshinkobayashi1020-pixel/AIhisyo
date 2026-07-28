@@ -2,6 +2,8 @@ import crypto from "node:crypto";
 
 export const runtime = "nodejs";
 
+const ONLINE_SCHEDULING_URL = "https://app.aitemasu.me/ev/57pzl1w1rtsx";
+
 // LINEからのWebhookは「x-line-signature」ヘッダーで署名されている。
 // チャネルシークレットで検証しないと、誰でも偽のリクエストを送れてしまう。
 function verifySignature(rawBody, signature, secret) {
@@ -59,13 +61,33 @@ function getLineSourceTarget(source = {}) {
 
 function isCalendarInstruction(text) {
   const value = String(text || "");
-  return /(空いて|空き(?:の日|時間)|可能(?:ですか|でしょうか|な日|な時間)|都合(?:は|の良い)|いつ(?:なら)?可能|何日(?:が|なら)?.*可能|何時(?:が|なら)?.*可能|日程(?:を|の)?(?:確認|相談)|撮影日(?:を|の)?(?:確認|相談)|(?:この|その)(?:時間|日時|日程)で|\d{1,2}時(?:半)?(?:で|から).*(?:お願い|決定|確定))/.test(value)
+  return /(空いて|空き(?:の日|時間)|可能(?:ですか|でしょうか|な日|な時間)|都合(?:は|の良い)|いつ(?:にします|がいい|が空いて|空いて|なら)|何日(?:が|なら)?.*可能|何時(?:が|なら)?.*可能|日程(?:を|の)?(?:確認|相談)|撮影日(?:を|の)?(?:確認|相談)|(?:この|その)(?:時間|日時|日程)で|\d{1,2}時(?:半)?(?:で|から).*(?:お願い|決定|確定))/.test(value)
     && !/(請求書|請求先|振込先|入金)/.test(value);
+}
+
+function meetingMode(text) {
+  const value = String(text || "");
+  const hasMeetingWord = /(打ち合わせ|打合せ|面談|ミーティング)/.test(value);
+  const isOnline = /(オンライン|zoom|ズーム|google\s*meet|meet|ウェブ|web)/i.test(value);
+  const isOffline = /(オフライン|対面)/.test(value);
+  if (isOnline && (hasMeetingWord || value.trim().length <= 20)) return "online";
+  if (isOffline && (hasMeetingWord || value.trim().length <= 20)) return "offline";
+  if (!hasMeetingWord) return "";
+  if (/(直接|現地|来店)/.test(value)) return "offline";
+  return "unspecified";
 }
 
 function shouldHandleGroupMessage(text) {
   const value = String(text || "");
-  return value.includes("請求書") || isCalendarInstruction(value);
+  return value.includes("請求書") || isCalendarInstruction(value) || Boolean(meetingMode(value));
+}
+
+function onlineMeetingReply() {
+  return `オンラインでのお打ち合わせは、こちらから日程調整をお願いいたします。\n${ONLINE_SCHEDULING_URL}`;
+}
+
+function unspecifiedMeetingReply() {
+  return `オンラインの場合は、こちらから日程調整をお願いいたします。\n${ONLINE_SCHEDULING_URL}\n\nオフラインの場合は、Googleカレンダーを確認して候補を3つお送りしますので、「オフライン」とお知らせください。`;
 }
 
 async function handleCalendarMessage(origin, text, source = {}) {
@@ -205,9 +227,20 @@ export async function POST(request) {
     }
 
     try {
-      const reply = isCalendarInstruction(event.message.text)
-        ? await handleCalendarMessage(origin, event.message.text, event.source)
-        : await handleMisakiMessage(origin, event.message.text, event.source);
+      const mode = meetingMode(event.message.text);
+      const reply = mode === "online"
+        ? onlineMeetingReply()
+        : mode === "unspecified"
+          ? unspecifiedMeetingReply()
+          : mode === "offline"
+            ? await handleCalendarMessage(
+              origin,
+              `${event.message.text}\n開始日から7日間で、空いている候補を3つ出してください。`,
+              event.source
+            )
+            : isCalendarInstruction(event.message.text)
+              ? await handleCalendarMessage(origin, event.message.text, event.source)
+              : await handleMisakiMessage(origin, event.message.text, event.source);
       if (reply?.skipReply) continue;
       if (typeof reply === "string") {
         await replyLine(event.replyToken, reply);
