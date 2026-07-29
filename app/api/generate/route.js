@@ -365,7 +365,7 @@ function cleanAmaneDialogue(text) {
 }
 
 function cleanScriptProductionNotes(text) {
-  const forbiddenHeading = /^\s*(?:#{1,6}\s*)?(?:【\s*)?(?:タイトル|絵コンテ|映像|テロップ|演出|効果音|撮影方法|撮影時の注意|狙い|対象者|想定尺|投稿キャプション|ハッシュタグ)(?:\s*[：:｜|】].*|\s*)$/;
+  const forbiddenHeading = /^\s*(?:#{1,6}\s*)?(?:\*{0,2})?(?:✅\s*)?(?:【\s*)?(?:完了しました(?:・確認をお願いします)?|タイトル|絵コンテ|映像|テロップ|演出|効果音|撮影方法|撮影時の注意|狙い|対象者|想定尺|投稿キャプション|ハッシュタグ)(?:\s*[：:｜|】].*|\s*)(?:\*{0,2})?\s*$/;
   return String(text || "")
     .replace(/^```[^\n]*\n?/gm, "")
     .replace(/```$/gm, "")
@@ -406,6 +406,33 @@ function countNumberedScriptHeadings(text) {
   return (String(text || "").match(/^【\s*\d+\s*本目\s*】\s*$/gm) || []).length;
 }
 
+const MANA_DIALOGUE_VARIATIONS = [
+  { format: "3人・美容師スタッフインタビュー", theme: "出来高制の働き方に感じていた不安と、収入が安定した働き方を選んで将来を考えやすくなったこと" },
+  { format: "3人・美容師スタッフインタビュー", theme: "社会保険や直接雇用が、結婚や長く働くことを考えるうえで安心につながったこと" },
+  { format: "3人・美容師スタッフインタビュー", theme: "入社前に技術面で不安だった美容師が、育成環境の中で成長を実感した場面" },
+  { format: "3人・同じ質問への現場と経営の回答", theme: "お客様に長く愛される美容師が、技術以外に大切にしていること" },
+  { format: "3人・同じ質問への現場と経営の回答", theme: "後輩が失敗したとき、美容師スタッフと社長はそれぞれどう向き合うか" },
+  { format: "3人・同じ質問への現場と経営の回答", theme: "辞めたいと思うほど悩んだスタッフへ、現場の先輩と社長がどう声をかけるか" },
+  { format: "2人・カメラマンと瀬川社長", theme: "若いうちの独立を急がず、技術、人間力、信頼を積み上げる意味" },
+  { format: "2人・カメラマンと瀬川社長", theme: "売上だけを追う働き方と、お客様や仲間を大切にする働き方の違い" },
+  { format: "2人・カメラマンと瀬川社長", theme: "一度退職したスタッフが戻りたいと言ったとき、会社としてどう向き合うか" },
+  { format: "2人・カメラマンと瀬川社長", theme: "スタッフとの人間関係で失敗した経験から、社長が変えたこと" },
+  { format: "3人・美容師スタッフインタビュー", theme: "毎月の生活費や将来への心配がある転職者に、実際の働きやすさをどう伝えるか" },
+  { format: "3人・同じ質問への現場と経営の回答", theme: "自分だけが売れる美容師と、周りの成長も喜べる美容師の違い" },
+];
+
+function manaDialogueVariation(instruction) {
+  const normalized = String(instruction || "").replace(/\s+/g, "");
+  const explicitTheme = /(店長|独立|売上|指名|退職|辞め|人間関係|お客様|接客|後輩|新人|育成|社会保険|出来高|収入|結婚|生活費|技術|失敗|信頼|愛され)/.test(normalized);
+  if (explicitTheme) return "";
+  const count = requestedScriptCount(instruction);
+  const pool = [...MANA_DIALOGUE_VARIATIONS].sort(() => Math.random() - 0.5);
+  const selected = pool.slice(0, Math.min(count, pool.length));
+  return selected
+    .map((item, index) => `${count > 1 ? `${index + 1}本目: ` : ""}${item.format}／${item.theme}`)
+    .join("\n");
+}
+
 async function requestTextResponse(job, instructions, input, effort = "low") {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
@@ -430,7 +457,9 @@ async function requestTextResponse(job, instructions, input, effort = "low") {
 async function generateText(job, instruction, customPrompt) {
   const effectiveCharacterSettings = ["寸劇系台本制作担当", "もしもシリーズ系台本担当", "にぎやか系台本制作担当", "求人系台本担当"].includes(job.role) ? ELF_CHARACTER_SETTING : "";
   const amaneVariation = job.referenceStyle ? nextAmaneVariation() : "";
-  const inputText = `${instruction}
+  const dialogueVariation = job.staffDialogueReference ? manaDialogueVariation(instruction) : "";
+  const requestContext = `${instruction}${dialogueVariation ? `\n\n今回必ず使用する形式とテーマ（次回は別の内容を選ぶ）:\n${dialogueVariation}\n店長選びへ変更しないでください。` : ""}`;
+  const inputText = `${requestContext}
 ${effectiveCharacterSettings ? `\n出演キャラクター設定:\n${effectiveCharacterSettings}` : ""}
 ${amaneVariation ? `\n今回だけ使用する構成（次回は別構成にする）:\n${amaneVariation}` : ""}`;
   const generated = await requestTextResponse(
@@ -494,7 +523,7 @@ ${amaneVariation}
 
 【担当者専用プロンプト】
 ${customPrompt}`,
-        `元の依頼:\n${instruction}\n\n照合対象の完成物:\n${content}`,
+        `元の依頼:\n${requestContext}\n\n照合対象の完成物:\n${content}`,
         "low"
       );
       content = job.referenceStyle ? (cleanAmaneDialogue(checked) || content) : (checked.trim() || content);
@@ -524,7 +553,7 @@ ${customPrompt}`,
 12. 「今回の動画は」「こんな方に向けた動画です」「ぜひ最後までご覧ください」など、内容に入る前の動画説明は削除し、対象者への直接的な呼びかけから始める
 
 すでに自然な箇所は変えず、違和感のある箇所だけを確実に直してください。`,
-        `元の依頼:\n${instruction}\n\n校正前の台本:\n${content}`,
+        `元の依頼:\n${requestContext}\n\n校正前の台本:\n${content}`,
         "low"
       );
     } catch (error) {
@@ -574,7 +603,7 @@ ${customPrompt}`,
 - 最終出力は話者名と実際に話すセリフだけにする
 
 すでに条件を満たす箇所は保ち、会話のテンポと駆け引きが弱い箇所だけを強くしてください。`,
-        `元の依頼:\n${instruction}\n\n校正前の台本:\n${content}`,
+        `元の依頼:\n${requestContext}\n\n校正前の台本:\n${content}`,
         "low"
       );
     } catch (error) {
@@ -599,7 +628,7 @@ ${customPrompt}`,
 - 一人語りは読み上げ文章だけ、会話台本は話者名とセリフだけにする
 
 すでに完成している台本は内容をできるだけ保ち、不足分だけ新しく作って指定本数を満たしてください。`,
-        `元の依頼:\n${instruction}\n\n本数確認前の成果物:\n${content}`,
+        `元の依頼:\n${requestContext}\n\n本数確認前の成果物:\n${content}`,
         "low"
       );
     } catch (error) {
