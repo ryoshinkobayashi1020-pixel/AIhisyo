@@ -6,7 +6,7 @@ const STAFF_JOBS = {
   elf_if: { role: "もしもシリーズ系台本担当", kind: "creative", model: "gpt-5.6-terra" },
   elf_lively: { role: "にぎやか系台本制作担当", kind: "creative", model: "gpt-5.6-terra", referenceStyle: true },
   elf_jobs: { role: "求人系台本担当", kind: "creative", model: "gpt-5.6-terra" },
-  mana_jobs: { role: "求人台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人" },
+  mana_jobs: { role: "求人台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人", manaLanguageReview: true },
   mana_narration: { role: "語り台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", narrationReference: true },
   miyabis_ads: { role: "広告台本制作担当", organization: "ミヤビス", kind: "creative", model: "gpt-5.6-terra", scriptType: "広告" },
   kabayaki_script: { role: "TikTok台本制作担当", organization: "かばやき屋", kind: "creative", model: "gpt-5.6-terra", scriptType: "運用代行" },
@@ -464,6 +464,33 @@ ${customPrompt}`,
       content = job.referenceStyle ? (cleanAmaneDialogue(checked) || content) : (checked.trim() || content);
     } catch (error) {
       console.error("Custom prompt verification error:", job.role, error);
+    }
+  }
+  if (job.manaLanguageReview && content.trim()) {
+    try {
+      content = await requestTextResponse(
+        job,
+        `あなたはマナコーポレーション求人動画の日本語校正担当です。
+完成台本を、初めて聞く人が一度で意味を理解できる自然な話し言葉へ直してください。
+
+必須確認:
+1. 助詞、活用、語順、主語と述語の対応を直す。「一歩をなせめる」のような存在しない表現や、「一歩踏めなくてもいい」のように意図と逆になる表現を残さない
+2. 各文が直前の文を自然に受けているか確認する。話題が変わる場合は、聞き手が分かるつなぎを入れる
+3. 不安や悩みを出す時は、何を選ぶ場合の不安なのかを先に明示する。「出来高制サロンの場合」「業務委託で働く場合」など、登録情報または元の台本に根拠がある条件だけを使う
+4. 「家賃や生活費を払った後、毎月どのくらい残るか心配で、一歩を踏み出せない」のように、生活場面、心配の理由、行動への影響を正しい順番でつなぐ
+5. 抽象的な言葉だけを並べず、結婚、家賃、生活費、保険、子育て、将来の貯金など、元の依頼や登録情報に合う具体例を自然に使う
+6. 出来高制、直接雇用、社会保険、育成環境などの条件を混同しない。確認できない待遇や制度は追加しない
+7. 同じ意味の文、過剰な改行、不自然な呼びかけ、意味のない接続詞を削る
+8. 元の台本の内容と十分な文字量は維持する。校正を理由に数行の短い文章へ縮めない
+9. 声に出して読んだ時に引っかからないか、内部で一文ずつ確認する
+10. タイトル、分析、修正理由、注釈、制作メモは出力せず、完成した読み上げ文章だけを返す
+
+すでに自然な箇所は変えず、違和感のある箇所だけを確実に直してください。`,
+        `元の依頼:\n${instruction}\n\n校正前の台本:\n${content}`,
+        "low"
+      );
+    } catch (error) {
+      console.error("Mana language review error:", error);
     }
   }
   if (job.scriptType || job.role.includes("台本") || job.role.includes("寸劇")) {
