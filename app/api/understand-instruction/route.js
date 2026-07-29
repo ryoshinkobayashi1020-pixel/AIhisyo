@@ -84,6 +84,11 @@ export async function POST(request) {
       ? "asuka"
       : "";
   const staffList = STAFF.map(([id, role]) => `- ${id}: ${role}`).join("\n");
+  const fixedTargetName = {
+    mana_jobs: "まな",
+    mana_narration: "しん",
+    mana_staff_dialogue: "ゆうき",
+  }[fixedTarget] || "";
   const prompt = `あなたはAI社員オフィスの業務受付です。ユーザーの音声認識結果を理解し、実行しやすい指示に整理してください。
 
 音声認識結果:
@@ -102,8 +107,9 @@ ${staffList}
 - short_summaryは業務ログ用に30文字程度で要約する
 - スタッフ名を呼んでいる場合は、業務名に似た単語が含まれていても、呼ばれた本人を優先する
 - 台本を複数本依頼されても担当者を増やさず、選ばれた1人だけへ全本をまとめて依頼する
+- 音声に複数のスタッフ名が入っていても、先に呼ばれた1人だけを担当者とする。understood_instructionにも他のスタッフへの依頼を残さない
 ${fixedTarget
-  ? `- 担当者はユーザーが直接選んだ ${fixedTarget} に固定し、staff_idを変更しない`
+  ? `- 担当者はユーザーが直接選んだ ${fixedTarget}${fixedTargetName ? `（${fixedTargetName}）` : ""} 1人に固定し、staff_idを変更しない。複数本もすべてこの1人へ依頼する`
   : "- 内容に最も適した担当者を1人選ぶ"}`;
 
   try {
