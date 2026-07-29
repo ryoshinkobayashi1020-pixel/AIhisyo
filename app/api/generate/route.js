@@ -1,4 +1,5 @@
 import { getStoreValue } from "@/lib/supabaseStore";
+import { MANA_STAFF_DIALOGUE_REFERENCE } from "./mana-dialogue-reference";
 import { MANA_COMPANY_KNOWLEDGE, MANA_NARRATION_REFERENCE } from "./mana-narration-reference";
 
 const STAFF_JOBS = {
@@ -8,6 +9,7 @@ const STAFF_JOBS = {
   elf_jobs: { role: "求人系台本担当", kind: "creative", model: "gpt-5.6-terra" },
   mana_jobs: { role: "求人台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人", manaLanguageReview: true },
   mana_narration: { role: "語り台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", narrationReference: true },
+  mana_staff_dialogue: { role: "スタッフ駆け引き台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", staffDialogueReference: true },
   miyabis_ads: { role: "広告台本制作担当", organization: "ミヤビス", kind: "creative", model: "gpt-5.6-terra", scriptType: "広告" },
   kabayaki_script: { role: "TikTok台本制作担当", organization: "かばやき屋", kind: "creative", model: "gpt-5.6-terra", scriptType: "運用代行" },
   ryoshin_jobs: { role: "求人TikTok台本担当", organization: "合同会社良心", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人" },
@@ -319,6 +321,8 @@ ${job.manaLanguageReview ? `マナコーポレーション求人台本の企画�
 - 複数本を依頼された場合は、各動画で対象者または悩みを変え、一本ごとに一人へ話す` : ""}
 ${job.narrationReference ? `次の語り台本専用データを、他の一般的な台本形式より優先して必ず使用してください。
 ${MANA_NARRATION_REFERENCE}` : ""}
+${job.staffDialogueReference ? `次のスタッフとの駆け引き・質疑応答台本専用データを、他の一般的な台本形式より優先して必ず使用してください。
+${MANA_STAFF_DIALOGUE_REFERENCE}` : ""}
 ${job.organization === "マナコーポレーション" ? `次の内容は、参考動画から整理して保存されたマナコーポレーション共通の基本情報です。今回のテーマに関係する理念と事実を必ず前提にしてください。
 ${MANA_COMPANY_KNOWLEDGE}` : ""}
 ユーザーの依頼から不足情報を捏造せず、確認できない数値や事実には注記してください。
@@ -504,6 +508,35 @@ ${customPrompt}`,
       console.error("Mana language review error:", error);
     }
   }
+  if (job.staffDialogueReference && content.trim()) {
+    try {
+      content = await requestTextResponse(
+        job,
+        `あなたは美容業界の対話型TikTok台本を校正する構成作家です。
+台本を次の条件で確認し、違反があれば自然な会話へ書き直してください。
+
+- スタッフの最初の質問だけで今回のテーマが分かる
+- スタッフと瀬川社長の質問・回答が最低3往復あり、基本5〜8往復ある
+- 全体を45〜75秒、日本語で約350〜550文字に収める。長い回答は要点を残して短くする
+- スタッフが一度は「でも」「それなら」「具体的には」など、答えを深める反論または再質問をする
+- 瀬川社長の答えは結論だけで終わらず、登録済みの事実、経験、具体的な美容室の場面のいずれかで説明する
+- 一方が長く話し続けず、2〜4文ごとに相手が返す
+- 各発言が直前の発言を自然に受け、同じ質問や答えを繰り返さない
+- スタッフを無知として笑わず、瀬川社長も肩書きで押し切らない
+- 足場、建設、資材、トラックなど見本チャンネルの業界情報を残さず、美容業界へ置き換える
+- マナコーポレーションについて確認できない給与、休日、待遇、制度、出来事を作らない
+- 助詞、語順、主語と述語を整え、声に出して一度で意味が分かる日本語にする
+- タイトル、説明、注釈、絵コンテ、テロップ、効果音は出力しない
+- 最終出力は話者名と実際に話すセリフだけにする
+
+すでに条件を満たす箇所は保ち、会話のテンポと駆け引きが弱い箇所だけを強くしてください。`,
+        `元の依頼:\n${instruction}\n\n校正前の台本:\n${content}`,
+        "low"
+      );
+    } catch (error) {
+      console.error("Mana staff dialogue review error:", error);
+    }
+  }
   if (job.scriptType || job.role.includes("台本") || job.role.includes("寸劇")) {
     content = cleanScriptProductionNotes(content);
   }
@@ -573,9 +606,10 @@ export async function POST(request) {
     return Response.json({
       ...result,
       role: job.role,
-      promptApplied: Boolean(effectivePrompt || job.narrationReference),
+      promptApplied: Boolean(effectivePrompt || job.narrationReference || job.staffDialogueReference),
       promptCharacters: effectivePrompt.length
         + (job.narrationReference ? MANA_NARRATION_REFERENCE.length : 0)
+        + (job.staffDialogueReference ? MANA_STAFF_DIALOGUE_REFERENCE.length : 0)
         + (job.organization === "マナコーポレーション" ? MANA_COMPANY_KNOWLEDGE.length : 0),
     });
   } catch (error) {
