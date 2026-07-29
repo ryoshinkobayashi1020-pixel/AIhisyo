@@ -599,18 +599,31 @@ const MANA_SHIN_YUKI_REVISION_PROMPT = `【しん・ゆうき共通・日本語�
 しんは、一つの主張に絞り、主張、過去の考え、問題が起きる理由、具体的な行動、現在の考えを自然につなぐ。説明不足のまま会社理念で締めない。
 ゆうきは、各質問を直前の回答から進める。美容師スタッフは現場の実感、瀬川社長は会社が環境を整える理由を話し、同じ説明を繰り返さない。最後は最初の質問への答えとして回収する。`;
 
+const MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT = `【しん・ゆうき共通・芯のある口調】
+- しんの語りと瀬川社長の発言は、丁寧に報告する弱い口調ではなく、経験や信念を自分の言葉で語る芯のある口調にする。
+- 「変わりました」「気づきました」「決めました」「しました」「必要です」だけで文を重ねない。「変わった」「気づいた」「決めた」「した」「必要なんだ」「そう考えている」「これからも続ける」のように、短く言い切る語尾を使う。
+- 特に結論、転機、反省、会社としての意思は、「〜だ」「〜なんだ」「〜する」「〜でいたい」「〜と決めた」のように強く締める。
+- ただし全てを同じ語尾にせず、前後のリズムに合わせて常体と丁寧語を自然に混ぜる。乱暴、威圧的、偉そうな口調にはしない。
+- 美容師スタッフの発言は本人の実感として自然な丁寧さを残せるが、瀬川社長の発言まで弱々しい敬語に揃えない。`;
+
 function applyManaShinYukiRevisionPrompt(settings) {
   let changed = false;
   ["mana_narration", "mana_staff_dialogue"].forEach(staffId => {
     settings[staffId] ||= {};
-    const current = typeof settings[staffId].prompt === "string"
+    let current = typeof settings[staffId].prompt === "string"
       ? settings[staffId].prompt.trim()
       : "";
-    if (current.includes("【しん・ゆうき共通・日本語と説明の最終品質確認】")) return;
-    settings[staffId].prompt = current
-      ? `${current}\n\n${MANA_SHIN_YUKI_REVISION_PROMPT}`
-      : MANA_SHIN_YUKI_REVISION_PROMPT;
-    changed = true;
+    if (!current.includes("【しん・ゆうき共通・日本語と説明の最終品質確認】")) {
+      current = current
+        ? `${current}\n\n${MANA_SHIN_YUKI_REVISION_PROMPT}`
+        : MANA_SHIN_YUKI_REVISION_PROMPT;
+      changed = true;
+    }
+    if (!current.includes("【しん・ゆうき共通・芯のある口調】")) {
+      current = `${current}\n\n${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}`;
+      changed = true;
+    }
+    settings[staffId].prompt = current;
   });
   return changed;
 }
@@ -2928,12 +2941,16 @@ function openStaffSettingsModal(staffId) {
         ? `【マナコーポレーション・語り台本制作プロンプト】
 登録済みの19本の参考動画全文と、その内容から分析した代表者の信念、仕事観、人との向き合い方を必ず使用してください。ユーザーの指示が短い場合は、内容、ターゲット、悩み、訴求、構成、尺を自分で決め、質問せずに完成台本を作ってください。テーマに応じて語りの構成を変え、一人で読み上げる文章だけを出力してください。「※」などの注釈、制作メモ、話者名、絵コンテ、テロップ、演技指示は入れないでください。
 
-${MANA_SHIN_YUKI_REVISION_PROMPT}`
+${MANA_SHIN_YUKI_REVISION_PROMPT}
+
+${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}`
       : staffId === "mana_staff_dialogue"
         ? `【マナコーポレーション・スタッフ駆け引き台本プロンプト】
 基本は「カメラマン」と瀬川社長による質問、即答、反論、具体化、再質問の自然な駆け引き台本を作ってください。内容によっては「カメラマン」「瀬川社長」「美容師スタッフ」の3人にしてください。3人版は求人インタビューだけでなく、カメラマンの一つの質問に美容師スタッフが現場の実感、瀬川社長が経営者としての理由や経験を答えるシンプルな会話にもできます。会社としての「人を大切にする」「お客様に愛される人づくり」「信頼と愛情の循環」と、瀬川社長の想い、仕事観、失敗経験をテーマに合わせて自然に反映してください。求人や働き方のインタビューでは、美容師スタッフが入社前の具体的な不安、マナの何が良かったか、生活や気持ちがどう変わったかを順につなげてください。出来高制ではないこと、収入の安定、直接雇用、社会保険、育成環境など登録済みの強みだけを使用し、未確認の個人情報は作らないでください。文法だけでなく、質問への答え方、動詞の対応、言葉の組み合わせを確認し、美容師が声に出して違和感のない日本語にしてください。指示が短い場合はテーマ、対象者、会話形式を自分で決めてください。出力は話者名と実際に話すセリフだけにしてください。
 
-${MANA_SHIN_YUKI_REVISION_PROMPT}`
+${MANA_SHIN_YUKI_REVISION_PROMPT}
+
+${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}`
         : staffId === "miyabis_ads"
           ? "【ミヤビス基本プロンプト】\nここに会社・ブランド情報、商品やサービス、特徴、ターゲット、広告目的、動画のトーン、CTA、禁止表現を入力してください。\n\n入力された事実だけを使い、確認できない効果や実績は作らないでください。"
           : "【かばやき屋基本プロンプト】\nここに店舗・会社情報、TikTok運用目的、想定視聴者、扱う商品・サービス、出演者、動画のトーン、CTA、禁止事項を入力してください。\n\n入力された事実と目的を優先し、撮影できる完成台本を作成してください。";
