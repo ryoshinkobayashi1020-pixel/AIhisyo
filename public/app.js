@@ -2115,20 +2115,24 @@ function startModalRecognition() {
     }
     livePartial = interim;
     updateTranscriptDisplay();
-    if (!activeModalStaffId) {
-      const normalizedNames = normalizeSpeechForStaffRouting(liveFinal + livePartial);
-      const recognizedStaff = findExplicitStaffListByReading(normalizedNames);
-      const recognizedTeams = findExplicitTeamsByReading(normalizedNames);
-      const recognizedLabels = [
-        ...recognizedTeams.map(team => team.name),
-        ...recognizedStaff
-          .filter(staff => !recognizedTeams.some(team => team.staff.includes(staff.id)))
-          .map(staff => staff.name),
-      ];
-      if (recognizedLabels.length) {
-        modalRecognizedTargetLabel = recognizedLabels.join("・");
-        setMicHint(`指示先：${modalRecognizedTargetLabel}（認識済み）・話し終わるまで静かに待機します`, false);
-      }
+    const normalizedNames = normalizeSpeechForStaffRouting(liveFinal + livePartial);
+    const recognizedStaff = findExplicitStaffListByReading(normalizedNames);
+    const recognizedTeams = findExplicitTeamsByReading(normalizedNames);
+    const selectedStaff = activeModalStaffId
+      ? STAFF.find(staff => staff.id === activeModalStaffId)
+      : null;
+    const recognizedLabels = [...new Set([
+      ...recognizedTeams.map(team => team.name),
+      ...(selectedStaff && !recognizedTeams.some(team => team.staff.includes(selectedStaff.id))
+        ? [selectedStaff.name]
+        : []),
+      ...recognizedStaff
+        .filter(staff => !recognizedTeams.some(team => team.staff.includes(staff.id)))
+        .map(staff => staff.name),
+    ])];
+    if (recognizedLabels.length) {
+      modalRecognizedTargetLabel = recognizedLabels.join("・");
+      setMicHint(`指示先：${modalRecognizedTargetLabel}（認識済み）・話し終わるまで静かに待機します`, false);
     }
   };
   rec.onend = () => {
@@ -2393,13 +2397,18 @@ async function handleInstructionSubmit(staffId, text) {
   closeInstructionModal();
   const trimmed = text.trim();
   const normalizedForRouting = normalizeSpeechForStaffRouting(trimmed);
-  const explicitlyCalledStaffList = staffId ? [] : findExplicitStaffListByReading(normalizedForRouting);
-  const explicitlyCalledTeams = staffId ? [] : findExplicitTeamsByReading(normalizedForRouting);
+  const explicitlyCalledStaffList = findExplicitStaffListByReading(normalizedForRouting);
+  const explicitlyCalledTeams = findExplicitTeamsByReading(normalizedForRouting);
+  const selectedStaff = staffId
+    ? STAFF.find(staff => staff.id === staffId)
+    : null;
   const teamStaff = explicitlyCalledTeams.flatMap(team =>
     team.staff.map(id => STAFF.find(staff => staff.id === id)).filter(Boolean)
   );
   const allExplicitTargets = [...new Map(
-    [...explicitlyCalledStaffList, ...teamStaff].map(staff => [staff.id, staff])
+    [selectedStaff, ...explicitlyCalledStaffList, ...teamStaff]
+      .filter(Boolean)
+      .map(staff => [staff.id, staff])
   ).values()];
   if (allExplicitTargets.length > 1 || explicitlyCalledTeams.length) {
     const batchId = `multi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
