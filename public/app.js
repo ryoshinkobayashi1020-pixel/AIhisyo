@@ -2085,6 +2085,7 @@ let modalListening = false;
 let liveFinal = "";
 let livePartial = "";
 let modalLocallyReactedStaffIds = new Set();
+let modalRecognizedTargetLabel = "";
 
 function updateTranscriptDisplay() {
   const combined = (liveFinal + livePartial).trim();
@@ -2125,14 +2126,22 @@ function startModalRecognition() {
           .map(staff => staff.name),
       ];
       if (recognizedLabels.length) {
-        setMicHint(`${recognizedLabels.join("・")}を認識しました。話し終わるまで静かに待機します`, false);
+        modalRecognizedTargetLabel = recognizedLabels.join("・");
+        setMicHint(`指示先：${modalRecognizedTargetLabel}（認識済み）・話し終わるまで静かに待機します`, false);
       }
     }
   };
   rec.onend = () => {
     modalListening = false;
     modalMicBtn.classList.remove("listening");
-    if (!modalOverlay.hidden) setMicHint("一時停止中(マイクを押して再開)", true);
+    if (!modalOverlay.hidden) {
+      setMicHint(
+        modalRecognizedTargetLabel
+          ? `指示先：${modalRecognizedTargetLabel}（認識済み）・「完了」を押すと指示を送信します`
+          : "一時停止中(マイクを押して再開)",
+        true
+      );
+    }
   };
   rec.onerror = (e) => {
     modalListening = false;
@@ -2151,7 +2160,12 @@ function startModalRecognition() {
     rec.start();
     modalListening = true;
     modalMicBtn.classList.add("listening");
-    setMicHint("聞き取り中…", false);
+    setMicHint(
+      modalRecognizedTargetLabel
+        ? `指示先：${modalRecognizedTargetLabel}・聞き取り中…`
+        : "聞き取り中…",
+      false
+    );
   } catch {
     /* recognition may already be starting */
   }
@@ -2212,6 +2226,9 @@ function openInstructionModal(staffId) {
   liveFinal = "";
   livePartial = "";
   modalLocallyReactedStaffIds = new Set();
+  modalRecognizedTargetLabel = staffId
+    ? (STAFF.find(staff => staff.id === staffId)?.name || "")
+    : "";
   updateTranscriptDisplay();
   modalTextInput.value = "";
   modalPromptInput.value = "";
