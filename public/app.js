@@ -408,6 +408,19 @@ function normalizeSpeechForStaffRouting(text) {
     .replace(/(?:匠|拓海)(?=(?:さん|くん|君|に|へ|、|,|と|って|お願い|開始|で|$))/g, "たくみ")
     .replace(/(?:飛鳥|明日香|安須賀)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|面接|で|$))/g, "あすか")
     .replace(/(?:美咲|実咲)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|請求|予定|で|$))/g, "みさき")
+    // 「新2本」「勇気八本」のように、音声認識が名前を漢字化して
+    // 直後に本数を続けた場合も、スタッフ名として正規化する。
+    .replace(/(?:優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?=[0-9０-９一二三四五六七八九十]+本)/g, "ゆうき")
+    .replace(/(?:新|真|慎|進|心|芯|信|伸|神|秦)(?=[0-9０-９一二三四五六七八九十]+本)/g, "しん")
+    .replace(/(?:真奈|愛奈|麻奈|茉奈|真名|麻那|愛菜|真菜)(?=[0-9０-９一二三四五六七八九十]+本)/g, "まな")
+    .replace(/(?:日和|陽依|妃依)(?=[0-9０-９一二三四五六七八九十]+本)/g, "ひより")
+    .replace(/(?:奏|奏音)(?=[0-9０-９一二三四五六七八九十]+本)/g, "かなで")
+    .replace(/(?:天音|甘音)(?=[0-9０-９一二三四五六七八九十]+本)/g, "あまね")
+    .replace(/陸(?=[0-9０-９一二三四五六七八九十]+本)/g, "りく")
+    .replace(/雅(?=[0-9０-９一二三四五六七八九十]+本)/g, "みやび")
+    .replace(/楓(?=[0-9０-９一二三四五六七八九十]+本)/g, "かえで")
+    .replace(/(?:琴葉|言葉)(?=[0-9０-９一二三四五六七八九十]+本)/g, "ことは")
+    .replace(/(?:蒼太|颯太|奏太)(?=[0-9０-９一二三四五六七八九十]+本)/g, "そうた")
     .replace(/[、。！？!?・\s]/g, "");
 }
 
@@ -455,7 +468,52 @@ function parseRequestedTotalScripts(text) {
   return count >= 1 && count <= 30 ? count : 0;
 }
 
+function parseJapaneseScriptCount(value) {
+  const normalized = String(value || "")
+    .replace(/[０-９]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  if (/^\d{1,2}$/.test(normalized)) {
+    const count = Number(normalized);
+    return count >= 1 && count <= 30 ? count : 0;
+  }
+  const digits = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (normalized === "十") return 10;
+  if (normalized.includes("十")) {
+    const [tens, ones] = normalized.split("十");
+    const count = (tens ? digits[tens] || 0 : 1) * 10 + (ones ? digits[ones] || 0 : 0);
+    return count >= 1 && count <= 30 ? count : 0;
+  }
+  return digits[normalized] || 0;
+}
+
+function parseStaffSpecificScriptCounts(targets, instruction) {
+  const normalized = normalizeSpeechForStaffRouting(
+    String(instruction || "").replace(/[０-９]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+  );
+  const mentions = targets
+    .map(staff => ({ staff, index: normalized.indexOf(staff.name) }))
+    .filter(item => item.index >= 0)
+    .sort((a, b) => a.index - b.index);
+  const counts = new Map();
+  mentions.forEach((mention, index) => {
+    const start = mention.index + mention.staff.name.length;
+    const end = mentions[index + 1]?.index ?? normalized.length;
+    const segment = normalized.slice(start, end);
+    const match = segment.match(/([0-9]{1,2}|[一二三四五六七八九十]{1,3})本/);
+    const count = parseJapaneseScriptCount(match?.[1]);
+    if (count) counts.set(mention.staff.id, count);
+  });
+  return counts;
+}
+
 function assignTeamScriptCounts(targets, instruction) {
+  const staffSpecificCounts = parseStaffSpecificScriptCounts(targets, instruction);
+  if (staffSpecificCounts.size) {
+    return targets.map(staff => ({
+      staff,
+      // 名前を呼ばれた全員を必ず実行対象にする。個別指定がない人は1本。
+      count: staffSpecificCounts.get(staff.id) || 1,
+    }));
+  }
   const delegated = /(おまかせ|お任せ|任せる|まかせる|自由に|本数.*自由|内訳.*任せ)/.test(instruction);
   const total = parseRequestedTotalScripts(instruction);
   if (!delegated && !total) return targets.map(staff => ({ staff, count: 0 }));
@@ -477,7 +535,7 @@ function assignTeamScriptCounts(targets, instruction) {
 function instructionForAssignedCount(instruction, staff, count) {
   if (!count) return instruction;
   const withoutSharedCount = String(instruction)
-    .replace(/(?:合計|全部で)?\s*[0-9０-９]{1,2}\s*本/g, "")
+    .replace(/(?:合計|全部で)?\s*(?:[0-9０-９]{1,2}|[一二三四五六七八九十]{1,3})\s*本/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
   return `${withoutSharedCount}\n\n${staff.name}の担当として、役割に合う内容とテーマを自分で決め、完成台本をちょうど${count}本作ってください。他担当者の台本は作らないでください。`;
