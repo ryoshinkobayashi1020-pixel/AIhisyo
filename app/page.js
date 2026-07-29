@@ -1,5 +1,7 @@
 import Script from "next/script";
 
+const APP_SCRIPT_VERSION = process.env.VERCEL_GIT_COMMIT_SHA || "local-development";
+
 export default function Home() {
   return (
     <>
@@ -810,7 +812,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260729-voice-multi-counts-v2" strategy="afterInteractive" />
+      <Script src={`/app.js?v=${APP_SCRIPT_VERSION}`} strategy="afterInteractive" />
     </>
   );
 }
