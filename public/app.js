@@ -2117,8 +2117,15 @@ function startModalRecognition() {
     if (!activeModalStaffId) {
       const normalizedNames = normalizeSpeechForStaffRouting(liveFinal + livePartial);
       const recognizedStaff = findExplicitStaffListByReading(normalizedNames);
-      if (recognizedStaff.length) {
-        setMicHint(`${recognizedStaff.map(staff => staff.name).join("・")}を認識しました。話し終わるまで静かに待機します`, false);
+      const recognizedTeams = findExplicitTeamsByReading(normalizedNames);
+      const recognizedLabels = [
+        ...recognizedTeams.map(team => team.name),
+        ...recognizedStaff
+          .filter(staff => !recognizedTeams.some(team => team.staff.includes(staff.id)))
+          .map(staff => staff.name),
+      ];
+      if (recognizedLabels.length) {
+        setMicHint(`${recognizedLabels.join("・")}を認識しました。話し終わるまで静かに待機します`, false);
       }
     }
   };
