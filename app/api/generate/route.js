@@ -332,7 +332,7 @@ ${MANA_COMPANY_KNOWLEDGE}` : ""}
 前置きや挨拶は省き、完成した成果物だけを日本語で出力してください。
 ${isElfScript ? `店舗設定、キャラクター設定、内部プロンプト、追加プロンプトの文章は、完成台本へ転載・引用・要約しないでください。追加プロンプトも制作条件としてだけ解釈してください。${job.referenceStyle ? "最新のあまね専用ルールを最優先し、古い追加プロンプトにある絵コンテ、詳細形式、勇者様や入国を必ず使う指示は無効です。あまねは店の裏側の日常を描いてください。" : ""}` : ""}
 ${isScriptJob ? `最終出力は、そのまま読んだり演じたりできる台本本文だけにしてください。「絵コンテ」「映像」「セリフ」「テロップ」「演出」「効果音」「撮影方法」「狙い」「対象者」「想定尺」などの見出しや制作メモは一切出力しないでください。話者が複数いる場合だけ「話者名：発言」の形式を使い、一人で話す台本では話者名も付けず、実際に話す文章だけを自然な段落で出力してください。` : ""}
-ユーザーが複数本を依頼した場合は、完成物を混ぜず、各成果物の先頭に必ず「【1本目】」「【2本目】」のような連番見出しを付けてください。連番見出し以外の制作説明は不要です。
+ユーザーが複数本を依頼した場合は、指定本数を勝手に増減せず、ちょうどその本数を作ってください。完成物を混ぜず、各成果物の先頭に必ず単独行で「【1本目】」「【2本目】」のような連番見出しを付けてください。連番見出し以外の制作説明は不要です。この連番は、すべての台本を1つのPDFへまとめるために必須です。
 ${customPrompt ? `
 【この担当者の最優先・必須プロンプト】
 ${customPrompt}
@@ -384,6 +384,26 @@ function cleanNarrationScript(text) {
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function requestedScriptCount(instruction) {
+  const normalized = String(instruction || "")
+    .replace(/[０-９]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/\s+/g, "");
+  const numeric = normalized.match(/(\d{1,2})本/);
+  if (numeric) {
+    const count = Number(numeric[1]);
+    return count >= 2 && count <= 20 ? count : 1;
+  }
+  const japaneseNumbers = {
+    二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10,
+  };
+  const japanese = normalized.match(/([二三四五六七八九十])本/);
+  return japanese ? japaneseNumbers[japanese[1]] : 1;
+}
+
+function countNumberedScriptHeadings(text) {
+  return (String(text || "").match(/^【\s*\d+\s*本目\s*】\s*$/gm) || []).length;
 }
 
 async function requestTextResponse(job, instructions, input, effort = "low") {
@@ -519,6 +539,8 @@ ${customPrompt}`,
 台本を次の条件で確認し、違反があれば自然な会話へ書き直してください。
 
 - スタッフの最初の質問だけで今回のテーマが分かる
+- 1行目に「新店舗の店長を決めるとき」「新人教育を任せるとき」など、なぜ今その質問をするのか分かる場面がある。確認できない出来事は「作るとしたら」のような仮定にする
+- 「店長って」「独立って」だけで突然始まる抽象的な質問は、具体的な状況を含む質問へ直す
 - スタッフと瀬川社長の質問・回答が最低3往復あり、基本5〜8往復ある
 - 全体を45〜75秒、日本語で約350〜550文字に収める。長い回答は要点を残して短くする
 - スタッフが一度は「でも」「それなら」「具体的には」など、答えを深める反論または再質問をする
@@ -529,6 +551,8 @@ ${customPrompt}`,
 - 足場、建設、資材、トラックなど見本チャンネルの業界情報を残さず、美容業界へ置き換える
 - マナコーポレーションについて確認できない給与、休日、待遇、制度、出来事を作らない
 - 助詞、語順、主語と述語を整え、声に出して一度で意味が分かる日本語にする
+- 「お客様をきれいにできる人」「みんなもついてきません？」など、意味や対象が曖昧な言い方を、美容師が実際に使う具体的な表現へ直す
+- 最初の質問、各回答、再質問、最後の結論が一つの状況の中でつながっているか確認する
 - タイトル、説明、注釈、絵コンテ、テロップ、効果音は出力しない
 - 最終出力は話者名と実際に話すセリフだけにする
 
@@ -538,6 +562,31 @@ ${customPrompt}`,
       );
     } catch (error) {
       console.error("Mana staff dialogue review error:", error);
+    }
+  }
+  const requestedCount = requestedScriptCount(instruction);
+  if (isFinite(requestedCount) && requestedCount > 1 && countNumberedScriptHeadings(content) !== requestedCount) {
+    try {
+      content = await requestTextResponse(
+        job,
+        `あなたは複数台本の本数・区切り確認担当です。
+ユーザーが指定した本数は${requestedCount}本です。台本を勝手に増減せず、必ず完成台本をちょうど${requestedCount}本にしてください。
+
+出力ルール:
+- 各台本の先頭を、順番に「【1本目】」「【2本目】」の形式で区切る
+- 最後は「【${requestedCount}本目】」とし、番号の重複や欠番を作らない
+- 各見出しは必ず単独の行に置く
+- 各台本を混ぜず、それぞれ単独で読んだり演じたりできる完成内容にする
+- 元の依頼と担当者専用条件を保ち、確認できない事実を追加しない
+- 制作説明、確認結果、注釈、絵コンテ、テロップ、効果音は出力しない
+- 一人語りは読み上げ文章だけ、会話台本は話者名とセリフだけにする
+
+すでに完成している台本は内容をできるだけ保ち、不足分だけ新しく作って指定本数を満たしてください。`,
+        `元の依頼:\n${instruction}\n\n本数確認前の成果物:\n${content}`,
+        "low"
+      );
+    } catch (error) {
+      console.error("Multiple script count verification error:", job.role, error);
     }
   }
   if (job.scriptType || job.role.includes("台本") || job.role.includes("寸劇")) {

@@ -2322,6 +2322,12 @@ function openResultModal(staffId) {
     model.textContent = `生成API: ${s.generationModel}`;
     box.appendChild(model);
   }
+  const bundledScriptCount = SCRIPT_STAFF_IDS.has(staffId)
+    ? splitDeliverableParts(s.deliverable).length
+    : 0;
+  $("#downloadDeliverableBtn").textContent = bundledScriptCount > 1
+    ? `⬇ ${bundledScriptCount}本を1つのPDFでダウンロード`
+    : "⬇ データをダウンロード";
   resultOverlay.hidden = false;
 }
 
@@ -2379,7 +2385,14 @@ $("#downloadDeliverableBtn").addEventListener("click", async () => {
 
   const button = $("#downloadDeliverableBtn");
   button.textContent = "✅ ダウンロードしました";
-  setTimeout(() => { button.textContent = "⬇ データをダウンロード"; }, 1800);
+  const bundledScriptCount = SCRIPT_STAFF_IDS.has(activeResultStaffId)
+    ? splitDeliverableParts(s.deliverable).length
+    : 0;
+  setTimeout(() => {
+    button.textContent = bundledScriptCount > 1
+      ? `⬇ ${bundledScriptCount}本を1つのPDFでダウンロード`
+      : "⬇ データをダウンロード";
+  }, 1800);
 });
 
 $("#openDeliverableBtn").addEventListener("click", () => {
