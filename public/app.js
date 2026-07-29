@@ -606,6 +606,12 @@ const MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT = `【しん・ゆうき共通・芯�
 - ただし全てを同じ語尾にせず、前後のリズムに合わせて常体と丁寧語を自然に混ぜる。乱暴、威圧的、偉そうな口調にはしない。
 - 美容師スタッフの発言は本人の実感として自然な丁寧さを残せるが、瀬川社長の発言まで弱々しい敬語に揃えない。`;
 
+const MANA_SHIN_YUKI_TONE_REFINEMENT_PROMPT = `【しん・ゆうき共通・言い切り表現の使い分け】
+- 「〜なんだ」を機械的に付けない。事実は「〜できない」、役割や条件は「〜必要がある」、本人の考えは「〜と思う」、会社の定義は「〜会社です」のように、文の意味に合う語尾で言い切る。
+- 「周りを輝かせるために上に立つ」のように立場の目的を誇張せず、「周りを輝かせる立場である必要がある」のように役割として自然に表現する。
+- 人の適性を述べる場合は「その人は強い」のような曖昧な評価で終わらせず、「その人が店長にふさわしいと思う」のように、何にふさわしいのかを明示する。
+- 会社の特徴や方針を最後に述べる場合は、毎回「〜でいたい」で願望にせず、確定している事実なら「〜会社です」と断定する。`;
+
 function applyManaShinYukiRevisionPrompt(settings) {
   let changed = false;
   ["mana_narration", "mana_staff_dialogue"].forEach(staffId => {
@@ -621,6 +627,10 @@ function applyManaShinYukiRevisionPrompt(settings) {
     }
     if (!current.includes("【しん・ゆうき共通・芯のある口調】")) {
       current = `${current}\n\n${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}`;
+      changed = true;
+    }
+    if (!current.includes("【しん・ゆうき共通・言い切り表現の使い分け】")) {
+      current = `${current}\n\n${MANA_SHIN_YUKI_TONE_REFINEMENT_PROMPT}`;
       changed = true;
     }
     settings[staffId].prompt = current;
@@ -2943,14 +2953,18 @@ function openStaffSettingsModal(staffId) {
 
 ${MANA_SHIN_YUKI_REVISION_PROMPT}
 
-${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}`
+${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}
+
+${MANA_SHIN_YUKI_TONE_REFINEMENT_PROMPT}`
       : staffId === "mana_staff_dialogue"
         ? `【マナコーポレーション・スタッフ駆け引き台本プロンプト】
 基本は「カメラマン」と瀬川社長による質問、即答、反論、具体化、再質問の自然な駆け引き台本を作ってください。内容によっては「カメラマン」「瀬川社長」「美容師スタッフ」の3人にしてください。3人版は求人インタビューだけでなく、カメラマンの一つの質問に美容師スタッフが現場の実感、瀬川社長が経営者としての理由や経験を答えるシンプルな会話にもできます。会社としての「人を大切にする」「お客様に愛される人づくり」「信頼と愛情の循環」と、瀬川社長の想い、仕事観、失敗経験をテーマに合わせて自然に反映してください。求人や働き方のインタビューでは、美容師スタッフが入社前の具体的な不安、マナの何が良かったか、生活や気持ちがどう変わったかを順につなげてください。出来高制ではないこと、収入の安定、直接雇用、社会保険、育成環境など登録済みの強みだけを使用し、未確認の個人情報は作らないでください。文法だけでなく、質問への答え方、動詞の対応、言葉の組み合わせを確認し、美容師が声に出して違和感のない日本語にしてください。指示が短い場合はテーマ、対象者、会話形式を自分で決めてください。出力は話者名と実際に話すセリフだけにしてください。
 
 ${MANA_SHIN_YUKI_REVISION_PROMPT}
 
-${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}`
+${MANA_SHIN_YUKI_ASSERTIVE_TONE_PROMPT}
+
+${MANA_SHIN_YUKI_TONE_REFINEMENT_PROMPT}`
         : staffId === "miyabis_ads"
           ? "【ミヤビス基本プロンプト】\nここに会社・ブランド情報、商品やサービス、特徴、ターゲット、広告目的、動画のトーン、CTA、禁止表現を入力してください。\n\n入力された事実だけを使い、確認できない効果や実績は作らないでください。"
           : "【かばやき屋基本プロンプト】\nここに店舗・会社情報、TikTok運用目的、想定視聴者、扱う商品・サービス、出演者、動画のトーン、CTA、禁止事項を入力してください。\n\n入力された事実と目的を優先し、撮影できる完成台本を作成してください。";
