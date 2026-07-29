@@ -461,14 +461,15 @@ function assignTeamScriptCounts(targets, instruction) {
   if (!delegated && !total) return targets.map(staff => ({ staff, count: 0 }));
   if (total) {
     const shuffled = [...targets].sort(() => Math.random() - 0.5);
-    const counts = new Map(targets.map(staff => [staff.id, 0]));
-    for (let index = 0; index < total; index += 1) {
+    // 名前を呼ばれた担当者は、本数が人数より少なくても対象から外さない。
+    // まず全員へ1本ずつ割り当て、残りだけを分配する。
+    const counts = new Map(targets.map(staff => [staff.id, 1]));
+    const remaining = Math.max(0, total - targets.length);
+    for (let index = 0; index < remaining; index += 1) {
       const staff = shuffled[index % shuffled.length];
       counts.set(staff.id, counts.get(staff.id) + 1);
     }
-    return targets
-      .map(staff => ({ staff, count: counts.get(staff.id) }))
-      .filter(item => item.count > 0);
+    return targets.map(staff => ({ staff, count: counts.get(staff.id) }));
   }
   return targets.map(staff => ({ staff, count: 1 + Math.floor(Math.random() * 3) }));
 }
@@ -2086,6 +2087,8 @@ let liveFinal = "";
 let livePartial = "";
 let modalLocallyReactedStaffIds = new Set();
 let modalRecognizedTargetLabel = "";
+let modalRecognizedStaffIds = new Set();
+let modalRecognizedTeamIds = new Set();
 
 function updateTranscriptDisplay() {
   const combined = (liveFinal + livePartial).trim();
@@ -2118,16 +2121,25 @@ function startModalRecognition() {
     const normalizedNames = normalizeSpeechForStaffRouting(liveFinal + livePartial);
     const recognizedStaff = findExplicitStaffListByReading(normalizedNames);
     const recognizedTeams = findExplicitTeamsByReading(normalizedNames);
+    recognizedStaff.forEach(staff => modalRecognizedStaffIds.add(staff.id));
+    recognizedTeams.forEach(team => modalRecognizedTeamIds.add(team.id));
     const selectedStaff = activeModalStaffId
       ? STAFF.find(staff => staff.id === activeModalStaffId)
       : null;
+    if (selectedStaff) modalRecognizedStaffIds.add(selectedStaff.id);
+    const allRecognizedStaff = [...modalRecognizedStaffIds]
+      .map(id => STAFF.find(staff => staff.id === id))
+      .filter(Boolean);
+    const allRecognizedTeams = [...modalRecognizedTeamIds]
+      .map(id => TEAMS.find(team => team.id === id))
+      .filter(Boolean);
     const recognizedLabels = [...new Set([
-      ...recognizedTeams.map(team => team.name),
-      ...(selectedStaff && !recognizedTeams.some(team => team.staff.includes(selectedStaff.id))
+      ...allRecognizedTeams.map(team => team.name),
+      ...(selectedStaff && !allRecognizedTeams.some(team => team.staff.includes(selectedStaff.id))
         ? [selectedStaff.name]
         : []),
-      ...recognizedStaff
-        .filter(staff => !recognizedTeams.some(team => team.staff.includes(staff.id)))
+      ...allRecognizedStaff
+        .filter(staff => !allRecognizedTeams.some(team => team.staff.includes(staff.id)))
         .map(staff => staff.name),
     ])];
     if (recognizedLabels.length) {
@@ -2230,6 +2242,8 @@ function openInstructionModal(staffId) {
   liveFinal = "";
   livePartial = "";
   modalLocallyReactedStaffIds = new Set();
+  modalRecognizedStaffIds = new Set(staffId ? [staffId] : []);
+  modalRecognizedTeamIds = new Set();
   modalRecognizedTargetLabel = staffId
     ? (STAFF.find(staff => staff.id === staffId)?.name || "")
     : "";
@@ -2392,13 +2406,23 @@ function openLatestInterviewReport() {
   }
 }
 
-async function handleInstructionSubmit(staffId, text) {
+async function handleInstructionSubmit(staffId, text, recognizedTargets = {}) {
   if (!text || !text.trim()) return;
   closeInstructionModal();
   const trimmed = text.trim();
   const normalizedForRouting = normalizeSpeechForStaffRouting(trimmed);
-  const explicitlyCalledStaffList = findExplicitStaffListByReading(normalizedForRouting);
-  const explicitlyCalledTeams = findExplicitTeamsByReading(normalizedForRouting);
+  const explicitlyCalledStaffList = [
+    ...findExplicitStaffListByReading(normalizedForRouting),
+    ...(recognizedTargets.staffIds || [])
+      .map(id => STAFF.find(staff => staff.id === id))
+      .filter(Boolean),
+  ];
+  const explicitlyCalledTeams = [
+    ...findExplicitTeamsByReading(normalizedForRouting),
+    ...(recognizedTargets.teamIds || [])
+      .map(id => TEAMS.find(team => team.id === id))
+      .filter(Boolean),
+  ];
   const selectedStaff = staffId
     ? STAFF.find(staff => staff.id === staffId)
     : null;
@@ -2549,8 +2573,12 @@ function submitCurrentModalInstruction() {
     setTimeout(() => modalTranscript.classList.remove("shake"), 400);
     return;
   }
+  const recognizedTargets = {
+    staffIds: [...modalRecognizedStaffIds],
+    teamIds: [...modalRecognizedTeamIds],
+  };
   stopModalRecognition(true);
-  handleInstructionSubmit(activeModalStaffId, text);
+  handleInstructionSubmit(activeModalStaffId, text, recognizedTargets);
 }
 
 document.addEventListener("keydown", event => {
