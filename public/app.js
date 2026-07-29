@@ -75,6 +75,7 @@ STAFF.forEach(s => {
   };
 });
 const taskRegistry = new Map();
+const archivedTeamBatchIds = new Set();
 const SHARED_CLIENT_KEY = "ai-office-shared-client";
 const SHARED_NAME_KEY = "ai-office-shared-name";
 let sharedClientId = localStorage.getItem(SHARED_CLIENT_KEY);
@@ -372,16 +373,35 @@ function normalizeSpeechForStaffRouting(text) {
     .replace(/(?:優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?=(?:さん|くん|君|に|へ|、|,|と|台本|動画|お願い|作って|つくって|で))/g, "ゆうき")
     .replace(/(?:新|真|慎|進|心)(?=(?:さん|くん|君|に|へ|、|,|と|台本|語り|お願い|作って|つくって|で))/g, "しん")
     .replace(/(?:真奈|愛奈|麻奈|茉奈)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|求人|お願い|作って|つくって|で))/g, "まな")
+    .replace(/(?:日和|陽依|妃依)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "ひより")
+    .replace(/(?:奏|奏音)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "かなで")
+    .replace(/(?:天音|甘音)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "あまね")
+    .replace(/陸(?=(?:さん|くん|君|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "りく")
+    .replace(/雅(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "みやび")
+    .replace(/楓(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "かえで")
+    .replace(/(?:琴葉|言葉)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "ことは")
+    .replace(/(?:蒼太|颯太|奏太)(?=(?:さん|くん|君|に|へ|、|,|と|編集|お願い|作って|つくって|で))/g, "そうた")
     .replace(/[、。！？!?・\s]/g, "");
 }
 
-function findExplicitStaffByReading(normalizedText) {
+function findExplicitStaffListByReading(normalizedText) {
+  let manaNameIndex = normalizedText.indexOf("まな");
+  while (manaNameIndex >= 0 && normalizedText.slice(manaNameIndex).startsWith("まなこーぽれーしょん")) {
+    manaNameIndex = normalizedText.indexOf("まな", manaNameIndex + "まなこーぽれーしょん".length);
+  }
   const candidates = [
-    ["mana_jobs", normalizedText.indexOf("まな")],
+    ["mana_jobs", manaNameIndex],
     ["mana_narration", normalizedText.indexOf("しん")],
     ["mana_staff_dialogue", normalizedText.indexOf("ゆうき")],
+    ...STAFF
+      .filter(staff => !["mana_jobs", "mana_narration", "mana_staff_dialogue"].includes(staff.id))
+      .map(staff => [staff.id, normalizedText.indexOf(staff.name)]),
   ].filter(([, index]) => index >= 0).sort((a, b) => a[1] - b[1]);
-  return candidates.length ? STAFF.find(staff => staff.id === candidates[0][0]) : null;
+  return candidates.map(([id]) => STAFF.find(staff => staff.id === id)).filter(Boolean);
+}
+
+function findExplicitStaffByReading(normalizedText) {
+  return findExplicitStaffListByReading(normalizedText)[0] || null;
 }
 
 // per-staff persisted persona settings (prompt / strengths / weaknesses)
@@ -542,6 +562,9 @@ async function archiveCompletedDeliverable(item) {
     filename: item.filename || "",
     model: item.model || "",
     taskId: item.taskId || "",
+    taskIds: Array.isArray(item.taskIds) ? item.taskIds : [],
+    teamId: item.teamId || "",
+    entries: Array.isArray(item.entries) ? item.entries : [],
     createdAt: item.createdAt || new Date().toISOString(),
   };
   try {
@@ -586,6 +609,10 @@ ${item.model ? `<p class="model">生成API: ${escapeHtml(item.model)}</p>` : ""}
 }
 
 async function downloadArchivedDeliverable(item) {
+  if (Array.isArray(item.entries) && item.entries.length) {
+    await downloadTeamDeliverablePdf(item);
+    return;
+  }
   const staff = { id: item.staffId, name: item.staffName, role: item.role };
   const fileBase = deliverableFileBase(staff);
   const validImage = typeof item.image === "string"
@@ -1443,7 +1470,7 @@ function flyMascotBetween(fromRect, toRect, staff, durationMs, onDone) {
   };
 }
 
-function startTask(staffId, instruction) {
+function startTask(staffId, instruction, taskOptions = {}) {
   // Accounting is a dedicated local workflow. Never send Misaki's work to
   // the generic staff generation endpoint, regardless of who called startTask.
   if (staffId === "invoice_clerk") {
@@ -1469,17 +1496,17 @@ function startTask(staffId, instruction) {
       toMascotEl.style.visibility = "hidden";
       flyMascotBetween(fromRect, toMascotEl.getBoundingClientRect(), staff, 280, () => {
         toMascotEl.style.visibility = "visible";
-        runStartTask(staffId, instruction, true, true);
+        runStartTask(staffId, instruction, true, true, taskOptions);
       });
     } else {
-      setTimeout(() => runStartTask(staffId, instruction, true, true), 280);
+      setTimeout(() => runStartTask(staffId, instruction, true, true, taskOptions), 280);
     }
   } else {
-    runStartTask(staffId, instruction, false, false);
+    runStartTask(staffId, instruction, false, false, taskOptions);
   }
 }
 
-function runStartTask(staffId, instruction, wasOnBreak, alreadyRendered) {
+function runStartTask(staffId, instruction, wasOnBreak, alreadyRendered, taskOptions = {}) {
   const staff = STAFF.find(s => s.id === staffId);
   const idx = STAFF.indexOf(staff);
   const s = state[staffId];
@@ -1493,6 +1520,10 @@ function runStartTask(staffId, instruction, wasOnBreak, alreadyRendered) {
     deliverable: "",
     image: "",
     model: "",
+    batchId: taskOptions.batchId || "",
+    batchTeamId: taskOptions.batchTeamId || "",
+    batchExpectedStaffIds: Array.isArray(taskOptions.batchExpectedStaffIds) ? taskOptions.batchExpectedStaffIds : [],
+    skipIndividualArchive: Boolean(taskOptions.skipIndividualArchive),
   };
   taskRegistry.set(taskId, task);
   s._taskIds.push(taskId);
@@ -1545,6 +1576,48 @@ function runStartTask(staffId, instruction, wasOnBreak, alreadyRendered) {
 
   // 残り時間を捏造せず、実際のAPI処理を直ちに開始する。
   completeTask(staffId, taskId);
+}
+
+async function archiveCompletedTeamBatch(task) {
+  if (!task?.batchId || !task.batchTeamId) return;
+  const archiveKey = `${task.batchId}:${task.batchTeamId}`;
+  if (archivedTeamBatchIds.has(archiveKey)) return;
+  const expectedIds = task.batchExpectedStaffIds || [];
+  const batchTasks = [...taskRegistry.values()].filter(item =>
+    item.batchId === task.batchId
+    && item.batchTeamId === task.batchTeamId
+    && (!expectedIds.length || expectedIds.includes(item.staffId))
+  );
+  if (!batchTasks.length || batchTasks.some(item => item.status !== "review")) return;
+  archivedTeamBatchIds.add(archiveKey);
+  const team = TEAMS.find(item => item.id === task.batchTeamId);
+  const entries = batchTasks.map(item => {
+    const staff = STAFF.find(person => person.id === item.staffId);
+    return {
+      taskId: item.id,
+      staffId: item.staffId,
+      staffName: staff?.name || item.staffId,
+      role: staff?.role || "台本制作",
+      content: item.deliverable || "",
+      model: item.model || "",
+    };
+  });
+  const teamName = team?.name || `${entries[0]?.staffName || "担当"}チーム`;
+  const content = entries
+    .map(entry => `【${entry.staffName}・${entry.role}】\n${entry.content}`)
+    .join("\n\n");
+  await archiveCompletedDeliverable({
+    id: `team-${archiveKey}`,
+    staffId: entries[0]?.staffId || "",
+    staffName: teamName,
+    role: `${teamName}・台本まとめ`,
+    content,
+    model: entries.map(entry => entry.model).filter(Boolean).join("／"),
+    teamId: task.batchTeamId,
+    entries,
+    taskIds: entries.map(entry => entry.taskId),
+  });
+  addLog("📚", `${teamName}の台本を1つのPDF用データにまとめました`);
 }
 
 async function completeTask(staffId, taskId) {
@@ -1600,15 +1673,19 @@ async function completeTask(staffId, taskId) {
   syncStaffTaskState(staffId);
   updateCard(staffId);
   updateStats();
-  await archiveCompletedDeliverable({
-    taskId,
-    staffId,
-    staffName: staff.name,
-    role: staff.role,
-    content: task.deliverable,
-    image: task.image,
-    model: task.model,
-  });
+  if (task.skipIndividualArchive) {
+    await archiveCompletedTeamBatch(task);
+  } else {
+    await archiveCompletedDeliverable({
+      taskId,
+      staffId,
+      staffName: staff.name,
+      role: staff.role,
+      content: task.deliverable,
+      image: task.image,
+      model: task.model,
+    });
+  }
   publishSharedTask({
     type:"task-complete",
     taskId,
@@ -1640,6 +1717,13 @@ function approveTaskById(staffId, taskId, logApproval = true) {
 }
 
 function acknowledgeTaskForDeletedDeliverable(item) {
+  if (Array.isArray(item?.taskIds) && item.taskIds.length) {
+    item.taskIds.forEach(taskId => {
+      const task = taskRegistry.get(taskId);
+      if (task) approveTaskById(task.staffId, taskId, false);
+    });
+    return;
+  }
   if (!item?.staffId || !state[item.staffId]) return;
   let taskId = item.taskId && taskRegistry.has(item.taskId) ? item.taskId : "";
   if (!taskId) {
@@ -2172,6 +2256,32 @@ async function handleInstructionSubmit(staffId, text) {
   if (!text || !text.trim()) return;
   closeInstructionModal();
   const trimmed = text.trim();
+  const normalizedForRouting = normalizeSpeechForStaffRouting(trimmed);
+  const explicitlyCalledStaffList = staffId ? [] : findExplicitStaffListByReading(normalizedForRouting);
+  if (explicitlyCalledStaffList.length > 1) {
+    const batchId = `multi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const scriptTargets = explicitlyCalledStaffList.filter(staff => SCRIPT_STAFF_IDS.has(staff.id));
+    const groupedTargets = new Map();
+    scriptTargets.forEach(staff => {
+      const team = findTeamOf(staff.id);
+      if (!team) return;
+      if (!groupedTargets.has(team.id)) groupedTargets.set(team.id, []);
+      groupedTargets.get(team.id).push(staff.id);
+    });
+    explicitlyCalledStaffList.forEach(staff => {
+      reactToLocalNameCall(staff);
+      const team = findTeamOf(staff.id);
+      const teamTargets = team ? (groupedTargets.get(team.id) || []) : [];
+      startTask(staff.id, trimmed, SCRIPT_STAFF_IDS.has(staff.id) ? {
+        batchId,
+        batchTeamId: team?.id || `staff-${staff.id}`,
+        batchExpectedStaffIds: teamTargets.length ? teamTargets : [staff.id],
+        skipIndividualArchive: true,
+      } : {});
+    });
+    addLog("👥", `${explicitlyCalledStaffList.map(staff => staff.name).join("・")}へ同時に指示しました。台本はチーム単位でPDFにまとめます`);
+    return;
+  }
   const locallyCalledStaff = findLocallyCalledStaff(staffId, trimmed);
 
   if (locallyCalledStaff?.id === "invoice_clerk" || (!staffId && (/(請求書|請求先|経理|振込先)/.test(trimmed) || isCalendarSchedulingInstruction(trimmed)))) {
@@ -5473,6 +5583,46 @@ async function downloadInterviewReportPdf(job, reportTitle = "面接評価レポ
     addLog("⚠️", "面接レポートPDFの保存に失敗しました");
     return false;
   }
+}
+
+async function downloadTeamDeliverablePdf(item) {
+  try {
+    await ensurePdfLibsLoaded();
+  } catch {
+    alert("PDF機能の読み込みに失敗しました。もう一度お試しください。");
+    return;
+  }
+  const team = TEAMS.find(value => value.id === item.teamId);
+  const firstStaff = STAFF.find(person => person.id === item.entries[0]?.staffId);
+  const accentA = team?.t?.[0] || firstStaff?.grad?.[0] || "#8d62cc";
+  const accentB = team?.t?.[1] || firstStaff?.grad?.[1] || "#6742a0";
+  const parts = item.entries.flatMap(entry => {
+    const scripts = splitDeliverableParts(entry.content);
+    if (!scripts.length) return [{ label: `${entry.staffName}・台本`, content: entry.content }];
+    return scripts.map(script => ({
+      label: `${entry.staffName}・${script.label}`,
+      content: script.content,
+    }));
+  });
+  const teamStaff = {
+    id: item.teamId || "team",
+    name: item.staffName,
+    role: item.role,
+  };
+  const teamStaffInfo = {
+    ...teamStaff,
+    emoji: team?.icon || "📚",
+    grad: [accentA, accentB],
+  };
+  await downloadBundledDeliverablePdf(
+    teamStaff,
+    teamStaffInfo,
+    parts,
+    item.createdAt,
+    item.model,
+    accentA,
+    accentB
+  );
 }
 
 async function downloadDeliverablePdf(staff, deliverableText, createdAt = new Date().toISOString(), model = "") {
