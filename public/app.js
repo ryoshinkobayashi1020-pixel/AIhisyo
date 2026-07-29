@@ -353,14 +353,35 @@ try {
 }
 
 function findBestStaffForInstruction(text) {
-  const lower = text.toLowerCase();
+  const lower = normalizeSpeechForStaffRouting(text);
+  const directlyCalled = STAFF.find(staff => lower.includes(staff.name));
+  if (directlyCalled) return directlyCalled;
   for (const staff of STAFF) {
     const keywords = ROLE_KEYWORDS[staff.role] || [];
-    if (keywords.some(k => lower.includes(k.toLowerCase()))) return staff;
+    if (keywords.some(k => lower.includes(normalizeSpeechForStaffRouting(k)))) return staff;
   }
   return STAFF.find(s => state[s.id].status === "idle")
     || STAFF.find(s => state[s.id].status === "break")
     || STAFF[0];
+}
+
+function normalizeSpeechForStaffRouting(text) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, char => String.fromCharCode(char.charCodeAt(0) - 0x60))
+    .replace(/(?:優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?=(?:さん|くん|君|に|へ|、|,|と|台本|動画|お願い|作って|つくって|で))/g, "ゆうき")
+    .replace(/(?:新|真|慎|進|心)(?=(?:さん|くん|君|に|へ|、|,|と|台本|語り|お願い|作って|つくって|で))/g, "しん")
+    .replace(/(?:真奈|愛奈|麻奈|茉奈)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|求人|お願い|作って|つくって|で))/g, "まな")
+    .replace(/[、。！？!?・\s]/g, "");
+}
+
+function findExplicitStaffByReading(normalizedText) {
+  const candidates = [
+    ["mana_jobs", normalizedText.indexOf("まな")],
+    ["mana_narration", normalizedText.indexOf("しん")],
+    ["mana_staff_dialogue", normalizedText.indexOf("ゆうき")],
+  ].filter(([, index]) => index >= 0).sort((a, b) => a[1] - b[1]);
+  return candidates.length ? STAFF.find(staff => staff.id === candidates[0][0]) : null;
 }
 
 // per-staff persisted persona settings (prompt / strengths / weaknesses)
@@ -2016,10 +2037,9 @@ function closeInstructionModal() {
 
 function findLocallyCalledStaff(staffId, text) {
   if (staffId) return STAFF.find(staff => staff.id === staffId) || null;
-  const normalized = String(text)
-    .replace(/[\u30a1-\u30f6]/g, char => String.fromCharCode(char.charCodeAt(0) - 0x60))
-    .replace(/\s+/g, "")
-    .toLowerCase();
+  const normalized = normalizeSpeechForStaffRouting(text);
+  const explicitlyCalledStaff = findExplicitStaffByReading(normalized);
+  if (explicitlyCalledStaff) return explicitlyCalledStaff;
   if (/(良心|りょうしん).*(求人|採用|募集|求人台本)/.test(normalized)) {
     return STAFF.find(staff => staff.id === "ryoshin_jobs");
   }
