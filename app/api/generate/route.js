@@ -322,7 +322,10 @@ ${job.manaLanguageReview ? `マナコーポレーション求人台本の企画�
 ${job.narrationReference ? `次の語り台本専用データを、他の一般的な台本形式より優先して必ず使用してください。
 ${MANA_NARRATION_REFERENCE}` : ""}
 ${job.staffDialogueReference ? `次のスタッフとの駆け引き・質疑応答台本専用データを、他の一般的な台本形式より優先して必ず使用してください。
-${MANA_STAFF_DIALOGUE_REFERENCE}` : ""}
+${MANA_STAFF_DIALOGUE_REFERENCE}
+
+次の「しん（語り台本制作担当）」へ登録された瀬川社長の人物データと19本の参考内容も共有情報です。今回の質問に関係する本人の想い、意気込み、失敗経験を選んで、社長の回答へ自然に反映してください。
+${MANA_NARRATION_REFERENCE}` : ""}
 ${job.organization === "マナコーポレーション" ? `次の内容は、参考動画から整理して保存されたマナコーポレーション共通の基本情報です。今回のテーマに関係する理念と事実を必ず前提にしてください。
 ${MANA_COMPANY_KNOWLEDGE}` : ""}
 ユーザーの依頼から不足情報を捏造せず、確認できない数値や事実には注記してください。
@@ -609,7 +612,7 @@ export async function POST(request) {
       promptApplied: Boolean(effectivePrompt || job.narrationReference || job.staffDialogueReference),
       promptCharacters: effectivePrompt.length
         + (job.narrationReference ? MANA_NARRATION_REFERENCE.length : 0)
-        + (job.staffDialogueReference ? MANA_STAFF_DIALOGUE_REFERENCE.length : 0)
+        + (job.staffDialogueReference ? MANA_STAFF_DIALOGUE_REFERENCE.length + MANA_NARRATION_REFERENCE.length : 0)
         + (job.organization === "マナコーポレーション" ? MANA_COMPANY_KNOWLEDGE.length : 0),
     });
   } catch (error) {
