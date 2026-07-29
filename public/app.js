@@ -809,6 +809,7 @@ if (window.speechSynthesis) {
 
 function speak(text, staffIndex = 0) {
   if (!window.speechSynthesis) return;
+  if (!modalOverlay.hidden) return;
   const utter = new SpeechSynthesisUtterance(text);
   applyStaffVoice(utter, STAFF[staffIndex]?.id || "reina");
   window.speechSynthesis.speak(utter);
@@ -2111,10 +2112,6 @@ function startModalRecognition() {
     }
     livePartial = interim;
     updateTranscriptDisplay();
-    if (!activeModalStaffId) {
-      const normalizedNames = normalizeSpeechForStaffRouting(liveFinal + livePartial);
-      findExplicitStaffListByReading(normalizedNames).forEach(reactToLocalNameCall);
-    }
   };
   rec.onend = () => {
     modalListening = false;
@@ -2153,6 +2150,7 @@ function stopModalRecognition(silent) {
 }
 
 function openInstructionModal(staffId) {
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
   if (staffId === "invoice_clerk") {
     openAccountingDesk("", "clients");
     return;
