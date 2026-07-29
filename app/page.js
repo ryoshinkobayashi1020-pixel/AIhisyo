@@ -810,7 +810,7 @@ export default function Home() {
         </div>
       </div>
 
-      <Script src="/app.js?v=20260729-misaki-secretary" strategy="afterInteractive" />
+      <Script src="/app.js?v=20260729-voice-multi-counts-v2" strategy="afterInteractive" />
     </>
   );
 }
