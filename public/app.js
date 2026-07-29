@@ -205,6 +205,26 @@ async function pollSharedRoom() {
 
 pollSharedRoom();
 window.setInterval(pollSharedRoom, 2000);
+window.setInterval(() => {
+  const staleBefore = Date.now() - 10 * 60 * 1000;
+  const affectedStaff = new Set();
+  [...taskRegistry.values()]
+    .filter(task => task.shared && task.status === "working" && Number(task.startedAt || 0) < staleBefore)
+    .forEach(task => {
+      taskRegistry.delete(task.id);
+      const staffState = state[task.staffId];
+      if (staffState) staffState._taskIds = staffState._taskIds.filter(id => id !== task.id);
+      affectedStaff.add(task.staffId);
+    });
+  affectedStaff.forEach(staffId => {
+    syncStaffTaskState(staffId);
+    updateCard(staffId);
+  });
+  if (affectedStaff.size) {
+    updateStats();
+    addLog("🧹", "完了通知が届かなかった古い共同タスクを作業中一覧から整理しました");
+  }
+}, 60 * 1000);
 
 function tasksForStaff(staffId, status = "") {
   return [...taskRegistry.values()].filter(task =>
@@ -1644,10 +1664,20 @@ async function archiveCompletedTeamBatch(task) {
     && item.batchTeamId === task.batchTeamId
     && (!expectedIds.length || expectedIds.includes(item.staffId))
   );
-  if (!batchTasks.length || batchTasks.some(item => item.status !== "review")) return;
+  const completedByStaff = new Map();
+  batchTasks
+    .filter(item => item.status === "review" && item.deliverable)
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .forEach(item => {
+      if (!completedByStaff.has(item.staffId)) completedByStaff.set(item.staffId, item);
+    });
+  if (!batchTasks.length || expectedIds.some(staffId => !completedByStaff.has(staffId))) return;
   archivedTeamBatchIds.add(archiveKey);
   const team = TEAMS.find(item => item.id === task.batchTeamId);
-  const entries = batchTasks.map(item => {
+  const completedTasks = expectedIds.length
+    ? expectedIds.map(staffId => completedByStaff.get(staffId)).filter(Boolean)
+    : [...completedByStaff.values()];
+  const entries = completedTasks.map(item => {
     const staff = STAFF.find(person => person.id === item.staffId);
     return {
       taskId: item.id,
@@ -1662,7 +1692,7 @@ async function archiveCompletedTeamBatch(task) {
   const content = entries
     .map(entry => `【${entry.staffName}・${entry.role}】\n${entry.content}`)
     .join("\n\n");
-  await archiveCompletedDeliverable({
+  const archived = await archiveCompletedDeliverable({
     id: `team-${archiveKey}`,
     staffId: entries[0]?.staffId || "",
     staffName: teamName,
@@ -1673,6 +1703,22 @@ async function archiveCompletedTeamBatch(task) {
     entries,
     taskIds: entries.map(entry => entry.taskId),
   });
+  if (!archived) {
+    archivedTeamBatchIds.delete(archiveKey);
+    return;
+  }
+  batchTasks
+    .filter(item => item.status === "working")
+    .forEach(item => {
+      taskRegistry.delete(item.id);
+      const staffState = state[item.staffId];
+      if (staffState) staffState._taskIds = staffState._taskIds.filter(id => id !== item.id);
+    });
+  expectedIds.forEach(staffId => {
+    syncStaffTaskState(staffId);
+    updateCard(staffId);
+  });
+  updateStats();
   addLog("📚", `${teamName}の台本を1つのPDF用データにまとめました`);
 }
 
@@ -1731,6 +1777,9 @@ async function completeTask(staffId, taskId) {
   updateStats();
   if (task.skipIndividualArchive) {
     await archiveCompletedTeamBatch(task);
+    window.setTimeout(() => {
+      void archiveCompletedTeamBatch(task);
+    }, 1000);
   } else {
     await archiveCompletedDeliverable({
       taskId,
