@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { MANA_NARRATION_REFERENCE } from "./mana-narration-reference";
+import { MANA_COMPANY_KNOWLEDGE, MANA_NARRATION_REFERENCE } from "./mana-narration-reference";
 
 const STAFF_JOBS = {
   elf_sketch: { role: "寸劇系台本制作担当", kind: "creative", model: "gpt-5.6-terra", hiyoriReference: true },
@@ -311,6 +311,8 @@ ${job.scriptType === "求人"
     : "TikTok運用代行の台本として、設定された運用目的とターゲットを優先し、テーマに合うフック、展開、回収またはCTAを持つ撮影可能な内容にする。"}` : ""}
 ${job.narrationReference ? `次の語り台本専用データを、他の一般的な台本形式より優先して必ず使用してください。
 ${MANA_NARRATION_REFERENCE}` : ""}
+${job.organization === "マナコーポレーション" ? `次の内容は、参考動画から整理して保存されたマナコーポレーション共通の基本情報です。今回のテーマに関係する理念と事実を必ず前提にしてください。
+${MANA_COMPANY_KNOWLEDGE}` : ""}
 ユーザーの依頼から不足情報を捏造せず、確認できない数値や事実には注記してください。
 前置きや挨拶は省き、完成した成果物だけを日本語で出力してください。
 ${isElfScript ? `店舗設定、キャラクター設定、内部プロンプト、追加プロンプトの文章は、完成台本へ転載・引用・要約しないでください。追加プロンプトも制作条件としてだけ解釈してください。${job.referenceStyle ? "最新のあまね専用ルールを最優先し、古い追加プロンプトにある絵コンテ、詳細形式、勇者様や入国を必ず使う指示は無効です。あまねは店の裏側の日常を描いてください。" : ""}` : ""}
@@ -536,7 +538,9 @@ export async function POST(request) {
       ...result,
       role: job.role,
       promptApplied: Boolean(effectivePrompt || job.narrationReference),
-      promptCharacters: effectivePrompt.length + (job.narrationReference ? MANA_NARRATION_REFERENCE.length : 0),
+      promptCharacters: effectivePrompt.length
+        + (job.narrationReference ? MANA_NARRATION_REFERENCE.length : 0)
+        + (job.organization === "マナコーポレーション" ? MANA_COMPANY_KNOWLEDGE.length : 0),
     });
   } catch (error) {
     console.error("Staff generation API error:", staffId, error);
