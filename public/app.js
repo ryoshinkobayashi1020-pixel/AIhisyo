@@ -404,6 +404,55 @@ function findExplicitStaffByReading(normalizedText) {
   return findExplicitStaffListByReading(normalizedText)[0] || null;
 }
 
+function findExplicitTeamsByReading(normalizedText) {
+  const aliases = [
+    ["mana_corporation", ["まなこーぽれーしょん", "まなちーむ", "まなこーぽれーしょんちーむ"]],
+    ["elfrontier", ["えるふろんてぃあ", "えるふろんてぃあちーむ", "えるふちーむ", "lふろんてぃあ"]],
+    ["miyabis", ["みやびす", "みやびすちーむ"]],
+    ["kabayaki", ["かばやき屋", "かばやきや", "かばやき屋ちーむ", "かばやきやちーむ"]],
+    ["ryoshin_tiktok", ["良心tiktok運用ちーむ", "りょうしんtiktok運用ちーむ", "良心tiktokちーむ", "りょうしんtiktokちーむ"]],
+  ];
+  return aliases
+    .filter(([, names]) => names.some(name => normalizedText.includes(normalizeSpeechForStaffRouting(name))))
+    .map(([teamId]) => TEAMS.find(team => team.id === teamId))
+    .filter(Boolean);
+}
+
+function parseRequestedTotalScripts(text) {
+  const normalized = String(text || "").replace(/[０-９]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
+  const match = normalized.match(/(?:合計|全部で)?\s*(\d{1,2})\s*本/);
+  if (!match || /(?:各|それぞれ|ずつ)\s*\d{1,2}\s*本/.test(normalized)) return 0;
+  const count = Number(match[1]);
+  return count >= 1 && count <= 30 ? count : 0;
+}
+
+function assignTeamScriptCounts(targets, instruction) {
+  const delegated = /(おまかせ|お任せ|任せる|まかせる|自由に|本数.*自由|内訳.*任せ)/.test(instruction);
+  const total = parseRequestedTotalScripts(instruction);
+  if (!delegated && !total) return targets.map(staff => ({ staff, count: 0 }));
+  if (total) {
+    const shuffled = [...targets].sort(() => Math.random() - 0.5);
+    const counts = new Map(targets.map(staff => [staff.id, 0]));
+    for (let index = 0; index < total; index += 1) {
+      const staff = shuffled[index % shuffled.length];
+      counts.set(staff.id, counts.get(staff.id) + 1);
+    }
+    return targets
+      .map(staff => ({ staff, count: counts.get(staff.id) }))
+      .filter(item => item.count > 0);
+  }
+  return targets.map(staff => ({ staff, count: 1 + Math.floor(Math.random() * 3) }));
+}
+
+function instructionForAssignedCount(instruction, staff, count) {
+  if (!count) return instruction;
+  const withoutSharedCount = String(instruction)
+    .replace(/(?:合計|全部で)?\s*[0-9０-９]{1,2}\s*本/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return `${withoutSharedCount}\n\n${staff.name}の担当として、役割に合う内容とテーマを自分で決め、完成台本をちょうど${count}本作ってください。他担当者の台本は作らないでください。`;
+}
+
 // per-staff persisted persona settings (prompt / strengths / weaknesses)
 const SETTINGS_KEY = "aiShainOfficeStaffSettings";
 function loadStaffSettings() {
@@ -2258,9 +2307,18 @@ async function handleInstructionSubmit(staffId, text) {
   const trimmed = text.trim();
   const normalizedForRouting = normalizeSpeechForStaffRouting(trimmed);
   const explicitlyCalledStaffList = staffId ? [] : findExplicitStaffListByReading(normalizedForRouting);
-  if (explicitlyCalledStaffList.length > 1) {
+  const explicitlyCalledTeams = staffId ? [] : findExplicitTeamsByReading(normalizedForRouting);
+  const teamStaff = explicitlyCalledTeams.flatMap(team =>
+    team.staff.map(id => STAFF.find(staff => staff.id === id)).filter(Boolean)
+  );
+  const allExplicitTargets = [...new Map(
+    [...explicitlyCalledStaffList, ...teamStaff].map(staff => [staff.id, staff])
+  ).values()];
+  if (allExplicitTargets.length > 1 || explicitlyCalledTeams.length) {
     const batchId = `multi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const scriptTargets = explicitlyCalledStaffList.filter(staff => SCRIPT_STAFF_IDS.has(staff.id));
+    const assignedTargets = assignTeamScriptCounts(allExplicitTargets, trimmed);
+    const activeTargets = assignedTargets.map(item => item.staff);
+    const scriptTargets = activeTargets.filter(staff => SCRIPT_STAFF_IDS.has(staff.id));
     const groupedTargets = new Map();
     scriptTargets.forEach(staff => {
       const team = findTeamOf(staff.id);
@@ -2268,18 +2326,22 @@ async function handleInstructionSubmit(staffId, text) {
       if (!groupedTargets.has(team.id)) groupedTargets.set(team.id, []);
       groupedTargets.get(team.id).push(staff.id);
     });
-    explicitlyCalledStaffList.forEach(staff => {
+    assignedTargets.forEach(({ staff, count }) => {
       reactToLocalNameCall(staff);
       const team = findTeamOf(staff.id);
       const teamTargets = team ? (groupedTargets.get(team.id) || []) : [];
-      startTask(staff.id, trimmed, SCRIPT_STAFF_IDS.has(staff.id) ? {
+      const assignedInstruction = instructionForAssignedCount(trimmed, staff, count);
+      startTask(staff.id, assignedInstruction, SCRIPT_STAFF_IDS.has(staff.id) ? {
         batchId,
         batchTeamId: team?.id || `staff-${staff.id}`,
         batchExpectedStaffIds: teamTargets.length ? teamTargets : [staff.id],
         skipIndividualArchive: true,
       } : {});
     });
-    addLog("👥", `${explicitlyCalledStaffList.map(staff => staff.name).join("・")}へ同時に指示しました。台本はチーム単位でPDFにまとめます`);
+    const assignmentSummary = assignedTargets
+      .map(({ staff, count }) => `${staff.name}${count ? `${count}本` : ""}`)
+      .join("・");
+    addLog("👥", `${assignmentSummary}へ同時に指示しました。台本はチーム単位でPDFにまとめます`);
     return;
   }
   const locallyCalledStaff = findLocallyCalledStaff(staffId, trimmed);
