@@ -370,17 +370,22 @@ function normalizeSpeechForStaffRouting(text) {
   return String(text || "")
     .toLowerCase()
     .replace(/[\u30a1-\u30f6]/g, char => String.fromCharCode(char.charCodeAt(0) - 0x60))
-    .replace(/(?:優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?=(?:さん|くん|君|に|へ|、|,|と|台本|動画|お願い|作って|つくって|で))/g, "ゆうき")
-    .replace(/(?:新|真|慎|進|心)(?=(?:さん|くん|君|に|へ|、|,|と|台本|語り|お願い|作って|つくって|で))/g, "しん")
-    .replace(/(?:真奈|愛奈|麻奈|茉奈)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|求人|お願い|作って|つくって|で))/g, "まな")
-    .replace(/(?:日和|陽依|妃依)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "ひより")
-    .replace(/(?:奏|奏音)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "かなで")
-    .replace(/(?:天音|甘音)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "あまね")
-    .replace(/陸(?=(?:さん|くん|君|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "りく")
-    .replace(/雅(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "みやび")
-    .replace(/楓(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "かえで")
-    .replace(/(?:琴葉|言葉)(?=(?:さん|ちゃん|に|へ|、|,|と|台本|お願い|作って|つくって|で))/g, "ことは")
-    .replace(/(?:蒼太|颯太|奏太)(?=(?:さん|くん|君|に|へ|、|,|と|編集|お願い|作って|つくって|で))/g, "そうた")
+    .replace(/(?:優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?=(?:さん|くん|君|に|へ|、|,|と|って|台本|動画|お願い|作って|つくって|で|$))/g, "ゆうき")
+    .replace(/(?:新|真|慎|進|心)(?=(?:さん|くん|君|に|へ|、|,|と|って|台本|語り|お願い|作って|つくって|で|$))/g, "しん")
+    .replace(/(?:真奈|愛奈|麻奈|茉奈)(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|求人|お願い|作って|つくって|で|$))/g, "まな")
+    .replace(/(?:日和|陽依|妃依)(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "ひより")
+    .replace(/(?:奏|奏音)(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "かなで")
+    .replace(/(?:天音|甘音)(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "あまね")
+    .replace(/陸(?=(?:さん|くん|君|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "りく")
+    .replace(/雅(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "みやび")
+    .replace(/楓(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "かえで")
+    .replace(/(?:琴葉|言葉)(?=(?:さん|ちゃん|に|へ|、|,|と|って|台本|お願い|作って|つくって|で|$))/g, "ことは")
+    .replace(/(?:蒼太|颯太|奏太)(?=(?:さん|くん|君|に|へ|、|,|と|って|編集|お願い|作って|つくって|で|$))/g, "そうた")
+    .replace(/(?:玲奈|麗奈)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|開始|で|$))/g, "れいな")
+    .replace(/桜(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|開始|で|$))/g, "さくら")
+    .replace(/(?:匠|拓海)(?=(?:さん|くん|君|に|へ|、|,|と|って|お願い|開始|で|$))/g, "たくみ")
+    .replace(/(?:飛鳥|明日香|安須賀)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|面接|で|$))/g, "あすか")
+    .replace(/(?:美咲|実咲)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|請求|予定|で|$))/g, "みさき")
     .replace(/[、。！？!?・\s]/g, "");
 }
 
@@ -421,7 +426,9 @@ function findExplicitTeamsByReading(normalizedText) {
 function parseRequestedTotalScripts(text) {
   const normalized = String(text || "").replace(/[０-９]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
   const match = normalized.match(/(?:合計|全部で)?\s*(\d{1,2})\s*本/);
-  if (!match || /(?:各|それぞれ|ずつ)\s*\d{1,2}\s*本/.test(normalized)) return 0;
+  const isPerPerson = /(?:各|それぞれ)\D{0,8}\d{1,2}\s*本/.test(normalized)
+    || /\d{1,2}\s*本\s*(?:ずつ|それぞれ)/.test(normalized);
+  if (!match || isPerPerson) return 0;
   const count = Number(match[1]);
   return count >= 1 && count <= 30 ? count : 0;
 }
@@ -2025,7 +2032,7 @@ let modalRecognition = null;
 let modalListening = false;
 let liveFinal = "";
 let livePartial = "";
-let modalLocallyReactedStaffId = "";
+let modalLocallyReactedStaffIds = new Set();
 
 function updateTranscriptDisplay() {
   const combined = (liveFinal + livePartial).trim();
@@ -2056,8 +2063,8 @@ function startModalRecognition() {
     livePartial = interim;
     updateTranscriptDisplay();
     if (!activeModalStaffId) {
-      const calledStaff = findLocallyCalledStaff(null, liveFinal + livePartial);
-      if (calledStaff) reactToLocalNameCall(calledStaff);
+      const normalizedNames = normalizeSpeechForStaffRouting(liveFinal + livePartial);
+      findExplicitStaffListByReading(normalizedNames).forEach(reactToLocalNameCall);
     }
   };
   rec.onend = () => {
@@ -2141,7 +2148,7 @@ function openInstructionModal(staffId) {
 
   liveFinal = "";
   livePartial = "";
-  modalLocallyReactedStaffId = "";
+  modalLocallyReactedStaffIds = new Set();
   updateTranscriptDisplay();
   modalTextInput.value = "";
   modalPromptInput.value = "";
@@ -2208,8 +2215,8 @@ function findLocallyCalledStaff(staffId, text) {
 
 function reactToLocalNameCall(staff) {
   if (!staff) return;
-  if (modalLocallyReactedStaffId === staff.id) return;
-  modalLocallyReactedStaffId = staff.id;
+  if (modalLocallyReactedStaffIds.has(staff.id)) return;
+  modalLocallyReactedStaffIds.add(staff.id);
   const wasOnBreak = state[staff.id].status === "break";
   if (wasOnBreak) {
     state[staff.id].status = "idle";
