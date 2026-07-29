@@ -59,6 +59,18 @@ function explicitlyCalledStaffId(normalizedText) {
   return candidates[0]?.[0] || "";
 }
 
+function calledManaStaffCount(normalizedText) {
+  return ["まな", "しん", "ゆうき"].filter(name => normalizedText.includes(name)).length;
+}
+
+function removeSpokenManaStaffNames(text) {
+  return String(text || "")
+    .replace(/(?:まな|マナ|しん|シン|ゆうき|ユウキ|優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?:さん|くん|君|ちゃん)?/g, "")
+    .replace(/(?:新|真|慎|進|心)(?=(?:さん|くん|君|に|へ|、|,|と|台本|語り|お願い|作って|つくって|で))/g, "")
+    .replace(/^[と、,\s]*(?:に|へ)?\s*/, "")
+    .trim();
+}
+
 export async function POST(request) {
   if (!process.env.OPENAI_API_KEY) {
     return Response.json(
@@ -141,6 +153,11 @@ ${fixedTarget
 
     const result = JSON.parse(extractOutputText(data));
     if (fixedTarget) result.staff_id = fixedTarget;
+    if (fixedTargetName && calledManaStaffCount(normalizedInstruction) > 1) {
+      const workOnly = removeSpokenManaStaffNames(cleanInstruction) || "指示された成果物を作成してください。";
+      result.understood_instruction = `${fixedTargetName}が担当し、${workOnly}`;
+      result.short_summary = `${fixedTargetName}が単独で担当`;
+    }
     return Response.json(result);
   } catch (error) {
     console.error("Instruction understanding error:", error);
