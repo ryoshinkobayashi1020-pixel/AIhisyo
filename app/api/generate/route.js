@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { MANA_NARRATION_REFERENCE } from "./mana-narration-reference";
 
 const STAFF_JOBS = {
   elf_sketch: { role: "寸劇系台本制作担当", kind: "creative", model: "gpt-5.6-terra", hiyoriReference: true },
@@ -7,6 +8,7 @@ const STAFF_JOBS = {
   elf_lively: { role: "にぎやか系台本制作担当", kind: "creative", model: "gpt-5.6-terra", referenceStyle: true },
   elf_jobs: { role: "求人系台本担当", kind: "creative", model: "gpt-5.6-terra" },
   mana_jobs: { role: "求人台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人" },
+  mana_narration: { role: "語り台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", narrationReference: true },
   miyabis_ads: { role: "広告台本制作担当", organization: "ミヤビス", kind: "creative", model: "gpt-5.6-terra", scriptType: "広告" },
   kabayaki_script: { role: "TikTok台本制作担当", organization: "かばやき屋", kind: "creative", model: "gpt-5.6-terra", scriptType: "運用代行" },
   ryoshin_jobs: { role: "求人TikTok台本担当", organization: "合同会社良心", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人" },
@@ -307,6 +309,8 @@ ${job.scriptType === "求人"
   : job.scriptType === "広告"
     ? "広告台本として、視聴者の悩み、商品・サービスを使う場面、選ぶ理由を一つの流れで見せ、誇大表現を避ける。"
     : "TikTok運用代行の台本として、設定された運用目的とターゲットを優先し、テーマに合うフック、展開、回収またはCTAを持つ撮影可能な内容にする。"}` : ""}
+${job.narrationReference ? `次の語り台本専用データを、他の一般的な台本形式より優先して必ず使用してください。
+${MANA_NARRATION_REFERENCE}` : ""}
 ユーザーの依頼から不足情報を捏造せず、確認できない数値や事実には注記してください。
 前置きや挨拶は省き、完成した成果物だけを日本語で出力してください。
 ${isElfScript ? `店舗設定、キャラクター設定、内部プロンプト、追加プロンプトの文章は、完成台本へ転載・引用・要約しないでください。追加プロンプトも制作条件としてだけ解釈してください。${job.referenceStyle ? "最新のあまね専用ルールを最優先し、古い追加プロンプトにある絵コンテ、詳細形式、勇者様や入国を必ず使う指示は無効です。あまねは店の裏側の日常を描いてください。" : ""}` : ""}
@@ -351,6 +355,16 @@ function cleanScriptProductionNotes(text) {
     .replace(/```$/gm, "")
     .split(/\r?\n/)
     .filter(line => !forbiddenHeading.test(line))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function cleanNarrationScript(text) {
+  return cleanScriptProductionNotes(text)
+    .split(/\r?\n/)
+    .filter(line => !/^\s*※/.test(line))
+    .map(line => line.replace(/^\s*(?:代表|社長|演者|ナレーション)[：:]\s*/, ""))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
@@ -455,6 +469,9 @@ ${customPrompt}`,
   if (job.scriptType || job.role.includes("台本") || job.role.includes("寸劇")) {
     content = cleanScriptProductionNotes(content);
   }
+  if (job.narrationReference) {
+    content = cleanNarrationScript(content);
+  }
   if (!content.trim()) throw new Error("台本の会話形式を確認できなかったため、生成をやり直してください。");
   return { type: "text", content, model: job.model };
 }
@@ -518,8 +535,8 @@ export async function POST(request) {
     return Response.json({
       ...result,
       role: job.role,
-      promptApplied: Boolean(effectivePrompt),
-      promptCharacters: effectivePrompt.length,
+      promptApplied: Boolean(effectivePrompt || job.narrationReference),
+      promptCharacters: effectivePrompt.length + (job.narrationReference ? MANA_NARRATION_REFERENCE.length : 0),
     });
   } catch (error) {
     console.error("Staff generation API error:", staffId, error);

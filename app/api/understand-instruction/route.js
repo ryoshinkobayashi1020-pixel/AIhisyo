@@ -10,6 +10,7 @@ const STAFF = [
   ["elf_lively", "えるふろんてぃあのにぎやか・わちゃわちゃ系TikTok台本制作"],
   ["elf_jobs", "えるふろんてぃあの求人系TikTok台本制作"],
   ["mana_jobs", "マナコーポレーションの求人TikTok台本制作"],
+  ["mana_narration", "マナコーポレーション代表者の一人語りTikTok台本制作。経営観、仕事観、人との向き合い方を語る台本"],
   ["miyabis_ads", "ミヤビスの広告TikTok台本制作"],
   ["kabayaki_script", "かばやき屋のTikTok運用代行・台本制作"],
   ["invoice_clerk", "合同会社良心の請求担当・社長個人予定担当。Googleカレンダーで社長の個人予定の空き確認、予定登録・取消、請求書画像作成、請求先管理"],

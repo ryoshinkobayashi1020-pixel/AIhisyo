@@ -13,6 +13,7 @@ const STAFF = [
   { id: "elf_lively", name: "あまね", gender: "female", role: "にぎやか系台本制作担当", emoji: "🎉", grad: ["#ffbd59", "#f2764b"], ear: "round", eyes: "sparkle", accessory: "star", shape: "round" },
   { id: "elf_jobs", name: "りく", gender: "male", role: "エンタメ系求人台本担当", emoji: "💼", grad: ["#55c6b5", "#268d80"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
   { id: "mana_jobs", name: "まな", gender: "female", role: "求人台本制作担当", emoji: "📣", grad: ["#ff8d76", "#d94f6d"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
+  { id: "mana_narration", name: "しん", gender: "male", role: "語り台本制作担当", emoji: "🎙️", grad: ["#596c8f", "#293750"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
   { id: "miyabis_ads", name: "みやび", gender: "female", role: "広告台本制作担当", emoji: "📢", grad: ["#62b9ef", "#5567cc"], ear: "pointy", eyes: "happy", accessory: "star", shape: "tall" },
   { id: "kabayaki_script", name: "かえで", gender: "female", role: "TikTok台本制作担当", emoji: "🎥", grad: ["#e5a84d", "#9a6330"], ear: "round", eyes: "happy", accessory: "flower", shape: "round" },
   { id: "invoice_clerk", name: "みさき", gender: "female", role: "請求担当・社長個人予定担当", emoji: "📅", grad: ["#ff91c8", "#f3b64c"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
@@ -30,6 +31,7 @@ const ROLE_KEYWORDS = {
   "にぎやか系台本制作担当": ["えるふのにぎやか", "にぎやか", "賑やか", "わちゃわちゃ", "大人数"],
   "エンタメ系求人台本担当": ["えるふの求人", "求人台本", "採用動画", "求人", "エンタメ系求人"],
   "求人台本制作担当": ["マナの求人", "マナコーポレーション", "求人台本"],
+  "語り台本制作担当": ["マナの語り", "語り台本", "語り系", "経営者の語り", "代表の語り", "しん"],
   "広告台本制作担当": ["ミヤビスの広告", "ミヤビス", "広告台本", "広告動画"],
   "TikTok台本制作担当": ["かばやき屋", "かばやきや", "TikTok台本", "運用代行"],
   "請求担当・社長個人予定担当": ["社長", "小林", "個人予定", "予定", "日程", "撮影日", "空き時間", "カレンダー", "登録", "経理", "請求書", "請求", "支払期限", "請求先", "振込先", "入金"],
@@ -40,13 +42,13 @@ const ROLE_KEYWORDS = {
 const TEAMS = [
   { id: "management", name: "採用試験ルーム", desc: "", icon: "🤝", t: ["#f5a38f", "#d96b81"], staff: ["reina", "sakura", "takumi", "asuka"] },
   { id: "elfrontier", name: "えるふろんてぃあ TikTok運用チーム", desc: "", icon: "🎬", t: ["#87dfc7", "#5c6fd8"], staff: ["elf_sketch", "elf_if", "elf_lively", "elf_jobs"] },
-  { id: "mana_corporation", name: "マナコーポレーション TikTok運用チーム", desc: "採用につながる求人TikTok台本制作", icon: "📣", t: ["#ffae82", "#df5d78"], staff: ["mana_jobs"] },
+  { id: "mana_corporation", name: "マナコーポレーション TikTok運用チーム", desc: "求人と経営者の語りTikTok台本制作", icon: "📣", t: ["#ffae82", "#df5d78"], staff: ["mana_jobs", "mana_narration"] },
   { id: "miyabis", name: "ミヤビス TikTok運用チーム", desc: "商品・サービスの広告TikTok台本制作", icon: "📢", t: ["#75c7ee", "#596bd3"], staff: ["miyabis_ads"] },
   { id: "kabayaki", name: "かばやき屋 TikTok運用代行チーム", desc: "", icon: "🎥", t: ["#e8b865", "#9c6837"], staff: ["kabayaki_script"] },
   { id: "accounting", name: "社長予定・請求管理", desc: "社長の個人予定と請求書を管理", icon: "💖", t: ["#ff8fc4", "#f0aa45"], staff: ["invoice_clerk"] },
   { id: "ryoshin_tiktok", name: "良心 TikTok運用チーム", desc: "求人台本制作とTikTok動画編集", icon: "📱", t: ["#a77de8", "#3f79b8"], staff: ["ryoshin_jobs", "ryoshin_video_editor"] },
 ];
-const SCRIPT_STAFF_IDS = new Set(["elf_sketch", "elf_if", "elf_lively", "elf_jobs", "mana_jobs", "miyabis_ads", "kabayaki_script", "ryoshin_jobs"]);
+const SCRIPT_STAFF_IDS = new Set(["elf_sketch", "elf_if", "elf_lively", "elf_jobs", "mana_jobs", "mana_narration", "miyabis_ads", "kabayaki_script", "ryoshin_jobs"]);
 const OFFICE_ROOMS = {
   operations: ["management", "accounting"],
   tiktok: ["elfrontier", "mana_corporation", "miyabis", "kabayaki", "ryoshin_tiktok"],
@@ -696,6 +698,7 @@ const STAFF_VOICE_PROFILES = {
   elf_lively: { gender: "female", pitch: 1.28, rate: 1.12, voiceOffset: 5 },
   elf_jobs:   { gender: "male",   pitch: 0.86, rate: 1.03, voiceOffset: 1 },
   mana_jobs:  { gender: "female", pitch: 1.12, rate: 1.04, voiceOffset: 6 },
+  mana_narration: { gender: "male", pitch: 0.9, rate: 0.96, voiceOffset: 2 },
   miyabis_ads:{ gender: "female", pitch: 1.02, rate: 1.08, voiceOffset: 7 },
   kabayaki_script:{ gender: "female", pitch: .96, rate: 1.02, voiceOffset: 8 },
   ryoshin_jobs:{ gender: "female", pitch: 1.08, rate: 1.04, voiceOffset: 9 },
@@ -2027,6 +2030,8 @@ function findLocallyCalledStaff(staffId, text) {
     if (/(求人|採用動画|募集)/.test(normalized)) return STAFF.find(staff => staff.id === "elf_jobs");
   }
   if (/(まな|マナ|まなこーぽれーしょん|マナコーポレーション)/.test(normalized)
+    && /(語り|経営者|代表|仕事観|信念)/.test(normalized)) return STAFF.find(staff => staff.id === "mana_narration");
+  if (/(まな|マナ|まなこーぽれーしょん|マナコーポレーション)/.test(normalized)
     && /(求人|採用|募集|台本)/.test(normalized)) return STAFF.find(staff => staff.id === "mana_jobs");
   if (/(みやびす|ミヤビス)/.test(normalized)
     && /(広告|宣伝|台本)/.test(normalized)) return STAFF.find(staff => staff.id === "miyabis_ads");
@@ -2432,6 +2437,8 @@ function openStaffSettingsModal(staffId) {
         ? "【合同会社良心・TikTok動画編集プロンプト】\nユーザーが伝えた素材、目的、尺、投稿先をもとに、実編集でそのまま使える編集指示を作成します。素材にない映像や事実を存在するものとして扱いません。カット順、不要部分、テロップ、BGM・効果音、色調、縦動画の書き出し設定を分かりやすく整理してください。複数案は【1本目】【2本目】のように区切ってください。"
       : staffId === "mana_jobs"
         ? "【マナコーポレーション基本プロンプト】\nここに会社情報、募集職種、仕事内容、待遇、応募条件、ターゲット、動画のトーン、禁止事項を入力してください。\n\n入力された事実だけを使い、確認できない条件や実績は作らないでください。"
+      : staffId === "mana_narration"
+        ? "【マナコーポレーション・語り台本制作プロンプト】\n登録済みの19本の参考動画全文と、その内容から分析した代表者の信念、仕事観、人との向き合い方を必ず使用してください。テーマに応じて語りの構成を変え、一人で読み上げる文章だけを出力してください。「※」などの注釈、制作メモ、話者名、絵コンテ、テロップ、演技指示は入れないでください。"
         : staffId === "miyabis_ads"
           ? "【ミヤビス基本プロンプト】\nここに会社・ブランド情報、商品やサービス、特徴、ターゲット、広告目的、動画のトーン、CTA、禁止表現を入力してください。\n\n入力された事実だけを使い、確認できない効果や実績は作らないでください。"
           : "【かばやき屋基本プロンプト】\nここに店舗・会社情報、TikTok運用目的、想定視聴者、扱う商品・サービス、出演者、動画のトーン、CTA、禁止事項を入力してください。\n\n入力された事実と目的を優先し、撮影できる完成台本を作成してください。";
@@ -2447,6 +2454,8 @@ function openStaffSettingsModal(staffId) {
       ? "🎬 えるふろんてぃあ基本プロンプト＋追加ルール"
       : staffId === "mana_jobs"
         ? "🎬 マナコーポレーション基本プロンプト"
+        : staffId === "mana_narration"
+          ? "🎙️ マナコーポレーション語り台本プロンプト"
         : staffId === "miyabis_ads"
           ? "🎬 ミヤビス基本プロンプト"
           : "🎬 かばやき屋基本プロンプト";
