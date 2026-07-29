@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { getStoreValue } from "@/lib/supabaseStore";
 import { MANA_COMPANY_KNOWLEDGE, MANA_NARRATION_REFERENCE } from "./mana-narration-reference";
 
 const STAFF_JOBS = {
@@ -329,8 +328,7 @@ ${customPrompt}
 
 async function loadSavedStaffPrompt(staffId) {
   try {
-    const file = path.join(process.cwd(), ".data", "staff-settings.json");
-    const settings = JSON.parse(await readFile(file, "utf8"));
+    const settings = await getStoreValue("staff-settings");
     return typeof settings?.[staffId]?.prompt === "string"
       ? settings[staffId].prompt.trim().slice(0, 50000)
       : "";
