@@ -2544,6 +2544,21 @@ $("#modalPromptSend").addEventListener("click", () => {
 /* ---------------- result modal ---------------- */
 const resultOverlay = $("#resultOverlay");
 
+function teamBundleForStaffResult(staffId) {
+  const displayTaskId = state[staffId]?._displayTaskId || "";
+  if (displayTaskId) {
+    const exact = deliverableVaultItems.find(item =>
+      Array.isArray(item.taskIds) && item.taskIds.includes(displayTaskId)
+    );
+    if (exact) return exact;
+  }
+  const reviewTaskIds = new Set(tasksForStaff(staffId, "review").map(task => task.id));
+  return deliverableVaultItems.find(item =>
+    Array.isArray(item.taskIds)
+    && item.taskIds.some(taskId => reviewTaskIds.has(taskId))
+  ) || null;
+}
+
 function openResultModal(staffId) {
   const staff = STAFF.find(s => s.id === staffId);
   const s = state[staffId];
@@ -2573,9 +2588,12 @@ function openResultModal(staffId) {
   const bundledScriptCount = SCRIPT_STAFF_IDS.has(staffId)
     ? splitDeliverableParts(s.deliverable).length
     : 0;
-  $("#downloadDeliverableBtn").textContent = bundledScriptCount > 1
-    ? `⬇ ${bundledScriptCount}本を1つのPDFでダウンロード`
-    : "⬇ データをダウンロード";
+  const teamBundle = teamBundleForStaffResult(staffId);
+  $("#downloadDeliverableBtn").textContent = teamBundle
+    ? `⬇ ${teamBundle.staffName}の統合PDFをダウンロード`
+    : bundledScriptCount > 1
+      ? `⬇ ${bundledScriptCount}本を1つのPDFでダウンロード`
+      : "⬇ データをダウンロード";
   resultOverlay.hidden = false;
 }
 
@@ -2619,11 +2637,14 @@ $("#downloadDeliverableBtn").addEventListener("click", async () => {
   if (!activeResultStaffId) return;
   const staff = STAFF.find(s => s.id === activeResultStaffId);
   const s = state[activeResultStaffId];
+  const teamBundle = teamBundleForStaffResult(activeResultStaffId);
   const fileBase = deliverableFileBase(staff);
   const validImage = typeof s.deliverableImage === "string"
     && /^data:image\/(?:png|jpeg|webp);base64,/.test(s.deliverableImage);
 
-  if (validImage) {
+  if (teamBundle) {
+    await downloadArchivedDeliverable(teamBundle);
+  } else if (validImage) {
     const extension = s.deliverableImage.startsWith("data:image/jpeg") ? "jpg"
       : s.deliverableImage.startsWith("data:image/webp") ? "webp" : "png";
     triggerDeliverableDownload(s.deliverableImage, `${fileBase}.${extension}`);
@@ -2637,9 +2658,11 @@ $("#downloadDeliverableBtn").addEventListener("click", async () => {
     ? splitDeliverableParts(s.deliverable).length
     : 0;
   setTimeout(() => {
-    button.textContent = bundledScriptCount > 1
-      ? `⬇ ${bundledScriptCount}本を1つのPDFでダウンロード`
-      : "⬇ データをダウンロード";
+    button.textContent = teamBundle
+      ? `⬇ ${teamBundle.staffName}の統合PDFをダウンロード`
+      : bundledScriptCount > 1
+        ? `⬇ ${bundledScriptCount}本を1つのPDFでダウンロード`
+        : "⬇ データをダウンロード";
   }, 1800);
 });
 
