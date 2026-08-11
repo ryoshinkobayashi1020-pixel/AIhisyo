@@ -479,6 +479,18 @@ function findExplicitTeamsByReading(normalizedText) {
     .filter(Boolean);
 }
 
+// チーム名と一緒に特定担当のキーワード（役割名・呼び名）が話された場合、
+// チーム全員への一斉送信ではなく、その1人だけを対象にする。
+function findExplicitTeamRoleStaff(team, normalizedText) {
+  for (const staffId of team.staff) {
+    const staff = STAFF.find(s => s.id === staffId);
+    if (!staff) continue;
+    const keywords = ROLE_KEYWORDS[staff.role] || [];
+    if (keywords.some(k => normalizedText.includes(normalizeSpeechForStaffRouting(k)))) return staff;
+  }
+  return null;
+}
+
 function parseRequestedTotalScripts(text) {
   const normalized = String(text || "").replace(/[０-９]/g, char => String.fromCharCode(char.charCodeAt(0) - 0xfee0));
   const match = normalized.match(/(?:合計|全部で)?\s*(\d{1,2})\s*本/);
@@ -2636,15 +2648,21 @@ async function handleInstructionSubmit(staffId, text, recognizedTargets = {}) {
   const selectedStaff = staffId
     ? STAFF.find(staff => staff.id === staffId)
     : null;
-  const teamStaff = explicitlyCalledTeams.flatMap(team =>
+  // チーム名だけでなく、その中の1人を特定できる役割キーワードも話されている場合は、
+  // チーム全員への一斉送信ではなく、その1人だけへ絞り込む。
+  const narrowedTeamRoleStaff = !staffId && !explicitlyCalledStaffList.length && explicitlyCalledTeams.length === 1
+    ? findExplicitTeamRoleStaff(explicitlyCalledTeams[0], normalizedForRouting)
+    : null;
+  const effectiveCalledTeams = narrowedTeamRoleStaff ? [] : explicitlyCalledTeams;
+  const teamStaff = effectiveCalledTeams.flatMap(team =>
     team.staff.map(id => STAFF.find(staff => staff.id === id)).filter(Boolean)
   );
   const allExplicitTargets = [...new Map(
-    [selectedStaff, ...explicitlyCalledStaffList, ...teamStaff]
+    [selectedStaff, narrowedTeamRoleStaff, ...explicitlyCalledStaffList, ...teamStaff]
       .filter(Boolean)
       .map(staff => [staff.id, staff])
   ).values()];
-  if (allExplicitTargets.length > 1 || explicitlyCalledTeams.length) {
+  if (allExplicitTargets.length > 1 || effectiveCalledTeams.length) {
     const batchId = `multi-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const assignedTargets = assignTeamScriptCounts(
       allExplicitTargets,
