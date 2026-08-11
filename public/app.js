@@ -12,6 +12,7 @@ const STAFF = [
   { id: "elf_if", name: "かなで", gender: "female", role: "もしもシリーズ系台本担当", emoji: "💭", grad: ["#9b8cff", "#6658c7"], ear: "pointy", eyes: "happy", accessory: "star", shape: "tall" },
   { id: "elf_lively", name: "あまね", gender: "female", role: "にぎやか系台本制作担当", emoji: "🎉", grad: ["#ffbd59", "#f2764b"], ear: "round", eyes: "sparkle", accessory: "star", shape: "round" },
   { id: "elf_jobs", name: "りく", gender: "male", role: "エンタメ系求人台本担当", emoji: "💼", grad: ["#55c6b5", "#268d80"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
+  { id: "elf_consult", name: "つばさ", gender: "male", role: "コンサル担当", emoji: "📈", grad: ["#7c93d8", "#465a9e"], ear: "pointy", eyes: "dot", accessory: "glasses", shape: "tall" },
   { id: "mana_jobs", name: "まな", gender: "female", role: "求人台本制作担当", emoji: "📣", grad: ["#ff8d76", "#d94f6d"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
   { id: "mana_narration", name: "しん", gender: "male", role: "語り台本制作担当", emoji: "🎙️", grad: ["#596c8f", "#293750"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
   { id: "mana_staff_dialogue", name: "ゆうき", gender: "male", role: "スタッフ駆け引き台本制作担当", emoji: "🗣️", grad: ["#4fa9a2", "#286a75"], ear: "round", eyes: "happy", accessory: "glasses", shape: "tall" },
@@ -39,11 +40,12 @@ const ROLE_KEYWORDS = {
   "請求担当・社長個人予定担当": ["社長", "小林", "個人予定", "予定", "日程", "撮影日", "空き時間", "カレンダー", "登録", "経理", "請求書", "請求", "支払期限", "請求先", "振込先", "入金"],
   "求人TikTok台本担当": ["良心の求人", "良心求人", "良心の求人台本", "良心TikTok求人", "ことは"],
   "TikTok動画編集担当": ["良心の動画編集", "良心動画編集", "TikTok動画編集", "動画編集", "そうた"],
+  "コンサル担当": ["えるふのコンサル", "コンサル", "コンサルティング", "ライン提案", "LINE提案", "個人アカウント提案", "TikTok LIVE提案", "つばさ"],
 };
 
 const TEAMS = [
   { id: "management", name: "採用試験ルーム", desc: "", icon: "🤝", t: ["#f5a38f", "#d96b81"], staff: ["reina", "sakura", "takumi", "asuka"] },
-  { id: "elfrontier", name: "えるふろんてぃあ TikTok運用チーム", desc: "", icon: "🎬", t: ["#87dfc7", "#5c6fd8"], staff: ["elf_sketch", "elf_if", "elf_lively", "elf_jobs"] },
+  { id: "elfrontier", name: "えるふろんてぃあ TikTok運用チーム", desc: "", icon: "🎬", t: ["#87dfc7", "#5c6fd8"], staff: ["elf_sketch", "elf_if", "elf_lively", "elf_jobs", "elf_consult"] },
   { id: "mana_corporation", name: "マナコーポレーション TikTok運用チーム", desc: "求人・語り・スタッフとの駆け引き台本制作", icon: "📣", t: ["#ffae82", "#df5d78"], staff: ["mana_jobs", "mana_narration", "mana_staff_dialogue"] },
   { id: "miyabis", name: "ミヤビス TikTok運用チーム", desc: "商品・サービスの広告TikTok台本制作", icon: "📢", t: ["#75c7ee", "#596bd3"], staff: ["miyabis_ads"] },
   { id: "kabayaki", name: "かばやき屋 TikTok運用代行チーム", desc: "", icon: "🎥", t: ["#e8b865", "#9c6837"], staff: ["kabayaki_script"] },
@@ -408,6 +410,7 @@ function normalizeSpeechForStaffRouting(text) {
     .replace(/(?:匠|拓海)(?=(?:さん|くん|君|に|へ|、|,|と|って|お願い|開始|で|$))/g, "たくみ")
     .replace(/(?:飛鳥|明日香|安須賀)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|面接|で|$))/g, "あすか")
     .replace(/(?:美咲|実咲)(?=(?:さん|ちゃん|に|へ|、|,|と|って|お願い|請求|予定|で|$))/g, "みさき")
+    .replace(/(?:翼|翔)(?=(?:さん|くん|君|に|へ|、|,|と|って|コンサル|提案|お願い|作って|つくって|で|$))/g, "つばさ")
     // 「新2本」「勇気八本」のように、音声認識が名前を漢字化して
     // 直後に本数を続けた場合も、スタッフ名として正規化する。
     .replace(/(?:優樹|優希|悠希|悠樹|勇気|祐樹|結城|友紀|有紀|裕樹|雄輝|夕希)(?=[0-9０-９一二三四五六七八九十]+本)/g, "ゆうき")
@@ -1030,6 +1033,7 @@ const STAFF_VOICE_PROFILES = {
   ryoshin_jobs:{ gender: "female", pitch: 1.08, rate: 1.04, voiceOffset: 9 },
   ryoshin_video_editor:{ gender: "male", pitch: .84, rate: 1.02, voiceOffset: 2 },
   invoice_clerk:{ gender: "female", pitch: 1.18, rate: 1.08, voiceOffset: 10 },
+  elf_consult:{ gender: "male", pitch: .92, rate: 1.0, voiceOffset: 11 },
 };
 
 function voiceLooksFemale(voice) {
@@ -2493,7 +2497,9 @@ function findLocallyCalledStaff(staffId, text) {
     if (/(もしも|もしもシリーズ)/.test(normalized)) return STAFF.find(staff => staff.id === "elf_if");
     if (/(にぎやか|賑やか|わちゃわちゃ|大人数)/.test(normalized)) return STAFF.find(staff => staff.id === "elf_lively");
     if (/(求人|採用動画|募集)/.test(normalized)) return STAFF.find(staff => staff.id === "elf_jobs");
+    if (/(コンサル|こんさる)/.test(normalized)) return STAFF.find(staff => staff.id === "elf_consult");
   }
+  if (/(コンサル|こんさる)/.test(normalized)) return STAFF.find(staff => staff.id === "elf_consult");
   if (/(まな|マナ|まなこーぽれーしょん|マナコーポレーション)/.test(normalized)
     && /(駆け引き|質疑応答|社長とスタッフ|スタッフ.*質問|質問.*社長)/.test(normalized)) return STAFF.find(staff => staff.id === "mana_staff_dialogue");
   if (/(まな|マナ|まなこーぽれーしょん|マナコーポレーション)/.test(normalized)

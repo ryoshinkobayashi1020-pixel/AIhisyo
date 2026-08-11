@@ -7,6 +7,7 @@ const STAFF_JOBS = {
   elf_if: { role: "もしもシリーズ系台本担当", kind: "creative", model: "gpt-5.6-terra" },
   elf_lively: { role: "にぎやか系台本制作担当", kind: "creative", model: "gpt-5.6-terra", referenceStyle: true },
   elf_jobs: { role: "求人系台本担当", kind: "creative", model: "gpt-5.6-terra" },
+  elf_consult: { role: "コンサル担当", kind: "creative", model: "gpt-5.6-terra" },
   mana_jobs: { role: "求人台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", scriptType: "求人", manaLanguageReview: true },
   mana_narration: { role: "語り台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", narrationReference: true },
   mana_staff_dialogue: { role: "スタッフ駆け引き台本制作担当", organization: "マナコーポレーション", kind: "creative", model: "gpt-5.6-terra", staffDialogueReference: true },
