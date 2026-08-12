@@ -1,4 +1,5 @@
 import { searchKnowledge } from "@/lib/liverKnowledge";
+import { calculateReward, yenToDiamonds, REWARD_CONFIG } from "@/lib/liverReward";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -94,8 +95,15 @@ const AGENCY_RULES = `この回答は代理店パートナー向けです。事�
 料率や弊社の取り分を聞かれたとき:
 - 事務所報酬の料率、弊社の取り分、手数料の割合は、いずれも開示していません
 - 「料率につきましては個別のご契約に基づくご案内となりますので、
-  担当者よりご連絡いたします」のように、非開示であることを伝える
-- 取り分が存在しない、手数料は無い、といった否定の書き方はしない
+  担当者よりご連絡いたします」とだけ答える
+
+弊社の手数料・控除について、絶対にしてはいけないこと:
+- 「手数料はありません」「差し引くことはありません」「100％お支払いします」など、
+  弊社が手数料や控除を取っていないと読める書き方は、いかなる場合もしない
+- 資料に「手数料なし」「全額支払い」といった記載があっても、それは他社の制度の説明なので、
+  弊社の対応として書き写さない
+- 手数料・取り分・控除・上乗せの有無を問われたら、有無について一切断定せず、
+  上の非開示の案内だけを返す
 - 資料に載っている料率の数値を、そのまま答えることはしない`;
 
 // showSources: 根拠資料の一覧と原本リンクを画面へ返すかどうか。
@@ -103,9 +111,108 @@ const AGENCY_RULES = `この回答は代理店パートナー向けです。事�
 // 回答文だけを見せる。社内用のなぎさだけは内容確認のために原本を開ける。
 const AUDIENCES = {
   client: { includeRevenue: false, showSources: false, rules: CLIENT_RULES },
-  internal: { includeRevenue: true, showSources: true, rules: INTERNAL_RULES },
-  agency: { includeRevenue: true, showSources: false, rules: AGENCY_RULES },
+  internal: { includeRevenue: true, showSources: true, showBreakdown: true, rewardShare: REWARD_CONFIG.retained.internal, rules: INTERNAL_RULES },
+  agency: { includeRevenue: true, showSources: false, showBreakdown: false, rewardShare: REWARD_CONFIG.retained.agency, guardFeeDisclosure: true, rules: AGENCY_RULES },
 };
+
+// 代理店向けの回答が、弊社の手数料・控除を「無い」と断定していないか機械的に確認する。
+// LINEの自動返信では人の目が入らないため、指示だけに頼らず最後にここで止める。
+// 資料にはNi-ni create側の「手数料なし」「全額支払い」という記載があり、
+// モデルがそれを弊社の対応として書き写してしまうことが実際に起きた。
+const FEE_DENIAL_PATTERNS = [
+  /手数料(は|を)?(一切)?(かかりません|ありません|発生しません|いただ(きません|いておりません)|徴収(しません|しておりません|したりすることはありません))/,
+  /手数料(なし|無し|不要)/,
+  /(差し引|差引|控除|天引き)(く|いた)?(ことは)?(ありません|ございません|いたしません|しません)/,
+  /(上乗せ)(する)?(ことは)?(ありません|ございません)/,
+  /(100|１００)ぱーせんと|(100|１００)％(を)?(そのまま)?(お支払い|お渡し|支給)/,
+  /全額(を)?(そのまま)?(お支払い|お渡し|支給)/,
+];
+
+const FEE_DISCLOSURE_FALLBACK = `事務所報酬の料率につきましては、個別のご契約に基づくご案内となりますので、担当者よりご連絡いたします。
+
+ご不明な点がございましたら、担当者までお問い合わせください。`;
+
+function violatesFeeDisclosureRule(answer) {
+  const normalized = String(answer || "").replace(/\s+/g, "");
+  return FEE_DENIAL_PATTERNS.some(pattern => pattern.test(normalized));
+}
+
+// 「100万円投げられたら事務所にいくら入る？」のような金額の質問は、
+// AIに計算させるとダイヤ換算や料率の取り違えが起きるため、ここで判定してコードで計算する。
+function parseJapaneseAmount(text) {
+  const normalized = String(text).replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)).replace(/,/g, "");
+  const unit = /ダイヤ|だいや|diamond/i.test(normalized) ? "diamond" : "yen";
+  const oku = normalized.match(/(\d+(?:\.\d+)?)\s*億/);
+  const man = normalized.match(/(\d+(?:\.\d+)?)\s*万/);
+  const plain = normalized.match(/(\d{3,})\s*(?:円|ダイヤ)/);
+  let value = 0;
+  if (oku) value += Number(oku[1]) * 100_000_000;
+  if (man) value += Number(man[1]) * 10_000;
+  if (!value && plain) value = Number(plain[1]);
+  return value > 0 ? { value, unit } : null;
+}
+
+function isRewardAmountQuestion(text) {
+  const value = String(text);
+  return /(いくら|何円|どれくらい|どのくらい|金額)/.test(value)
+    && /(事務所報酬|事務所|入る|入って|報酬|受け取|もらえ)/.test(value);
+}
+
+function yen(value) {
+  return `${Math.round(value).toLocaleString("ja-JP")}円`;
+}
+
+function buildRewardAnswer(question, audience) {
+  if (!audience.includeRevenue || !isRewardAmountQuestion(question)) return null;
+  const parsed = parseJapaneseAmount(question);
+  if (!parsed) return null;
+
+  const diamonds = parsed.unit === "diamond" ? parsed.value : yenToDiamonds(parsed.value);
+  const keep = calculateReward({ diamonds, rankMovement: "keep" });
+  const up = calculateReward({ diamonds, rankMovement: "up" });
+
+  // 料率が確定していない項目があるうちは、金額を出さずに担当者へ回す。
+  // 推測の数字を自動返信で送るより、確認に回すほうが安全。
+  if (keep.unresolved.length && up.unresolved.length) {
+    return `恐れ入りますが、こちらの金額は配信状況によって変動いたしますので、担当者より個別にご案内いたします。`;
+  }
+
+  const share = audience.rewardShare;
+  const lines = [];
+
+  if (audience.showBreakdown) {
+    lines.push(`${parsed.unit === "diamond" ? `${parsed.value.toLocaleString("ja-JP")}ダイヤ` : yen(parsed.value)}の場合、獲得ダイヤは約${diamonds.toLocaleString("ja-JP")}ダイヤ（ランク${keep.rank}）です。`);
+    lines.push("");
+    lines.push(`・ライバー報酬：${yen(keep.liverReward)}`);
+    if (!keep.unresolved.length) {
+      lines.push("");
+      lines.push("【ランク維持の場合】");
+      for (const item of keep.breakdown) lines.push(`・${item.label}：${item.note || yen(item.amount)}`);
+      lines.push(`・事務所報酬 合計：${yen(keep.total)}`);
+      lines.push(`・弊社受取：${yen(keep.total * share)}`);
+    }
+    if (!up.unresolved.length) {
+      lines.push("");
+      lines.push("【ランクアップの場合】");
+      for (const item of up.breakdown) lines.push(`・${item.label}：${item.note || yen(item.amount)}`);
+      lines.push(`・事務所報酬 合計：${yen(up.total)}`);
+      lines.push(`・弊社受取：${yen(up.total * share)}`);
+    }
+  } else {
+    // 代理店向けは金額のみ。内訳や料率は出さない。
+    if (!keep.unresolved.length) lines.push(`ランクを維持された場合、御社の事務所報酬は約${yen(keep.total * share)}です。`);
+    if (!up.unresolved.length) lines.push(`ランクアップされた場合は約${yen(up.total * share)}となります。`);
+    lines.push("");
+    lines.push("実際の金額は、配信日数や獲得ダイヤ数などの状況により変動いたします。");
+  }
+
+  const unresolvedAll = [...new Set([...keep.unresolved, ...up.unresolved])];
+  if (unresolvedAll.length && audience.showBreakdown) {
+    lines.push("");
+    lines.push(`※次の料率が資料から確定できていないため、この金額には含めていません：${unresolvedAll.join("、")}`);
+  }
+  return lines.join("\n");
+}
 
 async function composeAnswer(question, results, audience) {
   const apiKey = process.env.OPENAI_API_KEY;
@@ -162,12 +269,23 @@ export async function POST(request) {
 
     const audience = AUDIENCES[String(body.audience || "client")] || AUDIENCES.client;
 
+    // 金額の質問はAIに計算させず、確定した料率からコードで算出する。
+    const computed = buildRewardAnswer(question, audience);
+    if (computed) {
+      return Response.json({ ok: true, answer: computed, message: "", results: [] });
+    }
+
     const results = await searchKnowledge(question, 8, { includeRevenue: audience.includeRevenue });
     if (!results.length) {
       return Response.json({ ok: true, answer: "", results: [], message: "登録済みの資料の中に、該当する内容が見つかりませんでした。" });
     }
 
-    const { answer, error: answerError } = await composeAnswer(question, results, audience);
+    let { answer, error: answerError } = await composeAnswer(question, results, audience);
+
+    // 代理店向けで手数料の有無を断定してしまった回答は、そのまま送らせない。
+    if (audience.guardFeeDisclosure && violatesFeeDisclosureRule(answer)) {
+      answer = FEE_DISCLOSURE_FALLBACK;
+    }
 
     // 社外へ渡る窓口では、資料名も抜粋も原本リンクも返さない。回答文だけを見せる。
     const sources = [];
