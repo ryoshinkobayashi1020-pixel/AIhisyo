@@ -22,6 +22,8 @@ const STAFF = [
   { id: "ryoshin_jobs", name: "ことは", gender: "female", role: "求人TikTok台本担当", emoji: "📣", grad: ["#a77de8", "#6544ae"], ear: "round", eyes: "sparkle", accessory: "star", shape: "round" },
   { id: "ryoshin_video_editor", name: "そうた", gender: "male", role: "TikTok動画編集担当", emoji: "✂️", grad: ["#4f9fd8", "#285c94"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
   { id: "liver_assistant", name: "ひなた", gender: "female", role: "ライバー資料・質疑応答担当", emoji: "📚", grad: ["#7ad3f0", "#4a7fd6"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
+  { id: "liver_internal", name: "なぎさ", gender: "female", role: "自社ライバー担当", emoji: "🏠", grad: ["#8fd9a8", "#3f8f6d"], ear: "pointy", eyes: "happy", accessory: "flower", shape: "tall" },
+  { id: "liver_agency", name: "かいと", gender: "male", role: "代理店担当", emoji: "🤝", grad: ["#f0b46a", "#c2703a"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
 ];
 
 const ROLE_KEYWORDS = {
@@ -42,7 +44,9 @@ const ROLE_KEYWORDS = {
   "求人TikTok台本担当": ["良心の求人", "良心求人", "良心の求人台本", "良心TikTok求人", "ことは"],
   "TikTok動画編集担当": ["良心の動画編集", "良心動画編集", "TikTok動画編集", "動画編集", "そうた"],
   "コンサル担当": ["えるふのコンサル", "コンサル", "コンサルティング", "ライン提案", "LINE提案", "個人アカウント提案", "TikTok LIVE提案", "つばさ"],
-  "ライバー資料・質疑応答担当": ["ライバー", "らいばー", "ひなた", "配信ガイドライン", "事務所報酬", "代理店", "インセンティブ", "資料", "質疑応答"],
+  "ライバー資料・質疑応答担当": ["ライバー", "らいばー", "ひなた", "配信ガイドライン", "資料", "質疑応答"],
+  "自社ライバー担当": ["なぎさ", "自社ライバー", "社内", "うちのライバー", "所属ライバー"],
+  "代理店担当": ["かいと", "代理店", "だいりてん", "パートナー", "紹介制度"],
 };
 
 const TEAMS = [
@@ -53,7 +57,7 @@ const TEAMS = [
   { id: "kabayaki", name: "かばやき屋 TikTok運用代行チーム", desc: "", icon: "🎥", t: ["#e8b865", "#9c6837"], staff: ["kabayaki_script"] },
   { id: "accounting", name: "社長予定・請求管理", desc: "社長の個人予定と請求書を管理", icon: "💖", t: ["#ff8fc4", "#f0aa45"], staff: ["invoice_clerk"] },
   { id: "ryoshin_tiktok", name: "良心 TikTok運用チーム", desc: "求人台本制作とTikTok動画編集", icon: "📱", t: ["#a77de8", "#3f79b8"], staff: ["ryoshin_jobs", "ryoshin_video_editor"] },
-  { id: "liver", name: "ライバー部署", desc: "配信・代理店資料の管理と質疑応答", icon: "📚", t: ["#7ad3f0", "#4a7fd6"], staff: ["liver_assistant"] },
+  { id: "liver", name: "ライバー部署", desc: "配信・代理店資料の管理と質疑応答", icon: "📚", t: ["#7ad3f0", "#4a7fd6"], staff: ["liver_assistant", "liver_internal", "liver_agency"] },
 ];
 const SCRIPT_STAFF_IDS = new Set(["elf_sketch", "elf_if", "elf_lively", "elf_jobs", "mana_jobs", "mana_narration", "mana_staff_dialogue", "miyabis_ads", "kabayaki_script", "ryoshin_jobs"]);
 const OFFICE_ROOMS = {
@@ -1051,6 +1055,8 @@ const STAFF_VOICE_PROFILES = {
   invoice_clerk:{ gender: "female", pitch: 1.18, rate: 1.08, voiceOffset: 10 },
   elf_consult:{ gender: "male", pitch: .92, rate: 1.0, voiceOffset: 11 },
   liver_assistant:{ gender: "female", pitch: 1.14, rate: 1.02, voiceOffset: 12 },
+  liver_internal:{ gender: "female", pitch: 1.06, rate: 0.98, voiceOffset: 13 },
+  liver_agency:{ gender: "male", pitch: .88, rate: 1.0, voiceOffset: 3 },
 };
 
 function voiceLooksFemale(voice) {
@@ -2425,8 +2431,8 @@ function openInstructionModal(staffId) {
     openAccountingDesk("", "clients");
     return;
   }
-  if (staffId === "liver_assistant") {
-    openLiverDesk();
+  if (LIVER_DESK_STAFF[staffId]) {
+    openLiverDesk(staffId);
     return;
   }
   activeModalStaffId = staffId;
@@ -7152,10 +7158,56 @@ document.getElementById("accountingMicBtn")?.addEventListener("click", () => {
   button.textContent = "■ 停止";
 });
 
-/* ---------------- liver department (ひなた) ---------------- */
-let liverRecognition = null;
+/* ---------------- liver department ---------------- */
+// 同じ資料庫を使うが、誰へ見せる回答かによって出せる情報が変わる。
+// audience はサーバー側で参照範囲と金額の扱いを切り替えるために送る。
+const LIVER_DESK_STAFF = {
+  liver_assistant: {
+    audience: "client",
+    title: "ひなたのデスク",
+    role: "ライバー資料・質疑応答担当",
+    avatar: "📚",
+    lead: "登録済みの配信資料をもとに、クライアントへそのまま送れる回答を作ります",
+    note: "事務所側の報酬・収益条件は回答に含まれません",
+    placeholder: "例：初配信の前に準備しておくことはありますか？",
+  },
+  liver_internal: {
+    audience: "internal",
+    title: "なぎさのデスク",
+    role: "自社ライバー担当",
+    avatar: "🏠",
+    lead: "自社所属ライバーの対応用に、報酬を含む全資料から回答を作ります",
+    note: "社内用。事務所報酬を含む内容が出ます",
+    placeholder: "例：所属ライバーが100万ダイヤ獲得したときの事務所報酬は？",
+  },
+  liver_agency: {
+    audience: "agency",
+    title: "かいとのデスク",
+    role: "代理店担当",
+    avatar: "🤝",
+    lead: "代理店さま向けに、報酬を含む全資料から回答を作ります",
+    note: "代理店向け。適用条件に沿った金額で回答します",
+    placeholder: "例：代理店の事務所報酬はどのように決まりますか？",
+  },
+};
 
-function openLiverDesk() {
+let liverRecognition = null;
+let liverActiveStaffId = "liver_assistant";
+
+function openLiverDesk(staffId = "liver_assistant") {
+  const desk = LIVER_DESK_STAFF[staffId] || LIVER_DESK_STAFF.liver_assistant;
+  liverActiveStaffId = staffId;
+  document.querySelector("#liverOverlay .accounting-avatar").textContent = desk.avatar;
+  document.querySelector("#liverOverlay .accounting-header span").textContent = desk.role;
+  document.getElementById("liverTitle").textContent = desk.title;
+  document.querySelector("#liverOverlay .accounting-header p").textContent = desk.lead;
+  document.getElementById("liverAudienceNote").textContent = desk.note;
+  const question = document.getElementById("liverQuestion");
+  question.placeholder = desk.placeholder;
+  question.value = "";
+  document.getElementById("liverAnswerBox").hidden = true;
+  document.getElementById("liverSourcesBox").hidden = true;
+  document.getElementById("liverAskStatus").textContent = "";
   document.getElementById("liverOverlay").hidden = false;
   switchLiverTab("ask");
 }
@@ -7225,7 +7277,7 @@ async function askLiverAssistant() {
     const response = await fetch("/api/liver-assistant/ask", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify({ question, audience: LIVER_DESK_STAFF[liverActiveStaffId]?.audience || "client" }),
     });
     const data = await readLiverJson(response, "回答を作成できませんでした。");
     if (!response.ok) throw new Error(data.error || "回答を作成できませんでした。");
@@ -7235,7 +7287,7 @@ async function askLiverAssistant() {
       document.getElementById("liverAnswer").textContent = data.answer;
       answerBox.hidden = false;
       status.textContent = "";
-      showBubble("liver_assistant", "💬 回答をまとめました。内容をご確認ください。", 6000);
+      showBubble(liverActiveStaffId, "💬 回答をまとめました。内容をご確認ください。", 6000);
     } else {
       status.textContent = data.message || "回答文は作成できませんでしたが、該当しそうな資料を下に表示しました。";
     }

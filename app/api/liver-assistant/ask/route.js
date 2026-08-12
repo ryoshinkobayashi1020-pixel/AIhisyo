@@ -8,8 +8,8 @@ export const maxDuration = 60;
 const PAGE_CHAR_LIMIT = 2500;
 const MAX_PAGES = 8;
 
-const ANSWER_INSTRUCTIONS = `あなたはTikTok LIVE事務所のアシスタントです。
-提示された資料ページを読み込み、お客さまへそのまま送れる日本語の回答文を作成してください。
+const BASE_INSTRUCTIONS = `あなたはTikTok LIVE事務所のアシスタントです。
+提示された資料ページを読み込み、そのまま送れる日本語の回答文を作成してください。
 
 回答の作り方:
 - 資料に書かれている数字・条件・期間・名称は、省略せず具体的に記載する
@@ -36,22 +36,54 @@ const ANSWER_INSTRUCTIONS = `あなたはTikTok LIVE事務所のアシスタン�
 - 箇条書きは行頭に「・」を使う。入れ子にする場合は全角スペース2つで字下げする
 - 手順を示す場合は「1.」「2.」のような番号を使う
 
-この回答はクライアントへ提示するものです。次の内容は、たとえ資料ページに
-書かれていても回答へ一切含めないでください:
-- 事務所報酬、事務所の取り分、報酬率、バディ率・バディ報酬
-- 代理店のロイヤリティ、紹介料、弊社利益分などの収益条件
-- 事務所向けのインセンティブや売上シェアの金額・料率
-これらを聞かれた場合は、金額や条件には触れず
-「担当者より個別にご案内いたします」とだけ書いてください。
-（ライバー本人が受け取るクリエイター報酬・ライバー報酬の説明は含めて構いません）
-
 守ること:
 - 資料に無い数字や条件を創作しない
 - 「資料によると」「抜粋には」など、社内の資料を参照していることが分かる言い回しは使わない
 - 著作権表記や秘密保持の注意書きは回答へ含めない
 - 挨拶や署名は付けず、本文だけを書く`;
 
-async function composeAnswer(question, results) {
+// クライアント（ライバー本人・見込み客）向け。事務所側の収益条件は一切出さない。
+// 検索側でも該当資料を除外しているため、ここは二重の歯止め。
+const CLIENT_RULES = `この回答はクライアントへ提示するものです。次の内容は、たとえ資料ページに
+書かれていても回答へ一切含めないでください:
+- 事務所報酬、事務所の取り分、報酬率、バディ率・バディ報酬
+- 代理店のロイヤリティ、紹介料、弊社利益分などの収益条件
+- 事務所向けのインセンティブや売上シェアの金額・料率
+これらを聞かれた場合は、金額や条件には触れず
+「担当者より個別にご案内いたします」とだけ書いてください。
+（ライバー本人が受け取るクリエイター報酬・ライバー報酬の説明は含めて構いません）`;
+
+// 事務所報酬の金額・料率を、契約に基づく実際の適用額へ換算して提示する。
+// 換算そのものには触れず、適用後の数字だけを答える。
+function feeAdjustedRules(retainedPercent) {
+  return `この回答は事務所報酬の情報を含めて構いません。ただし金額の扱いに次の決まりがあります。
+
+事務所報酬の換算:
+- 資料に書かれている事務所報酬の金額・料率は、そのまま使わず
+  ${retainedPercent}％を掛けた数値へ換算して回答する
+  （例: 資料が1,500ドルなら ${Math.round(1500 * retainedPercent / 100).toLocaleString("en-US")}ドル、
+   資料が30％なら ${(30 * retainedPercent / 100).toFixed(1).replace(/\.0$/, "")}％）
+- 換算した数値だけを書く。元の数値は書かない
+- 換算していること、割合を掛けていること、手数料や控除が存在することは
+  一切書かない。「〜を差し引いた」「手数料込み」などの表現も使わない
+- 手数料の有無や料率を質問された場合は、金額や割合には触れず
+  「こちらは担当者より個別にご案内いたします」とだけ書く。
+  手数料が無いと断定する書き方はしない
+
+換算してはいけないもの（資料の数値をそのまま使う）:
+- ライバー本人が受け取るクリエイター報酬・ライバー報酬
+- ダイヤ数、視聴数、時間、日数などの実績値
+- 罰金額やペナルティ金額
+- 応募条件、期間、開催日などの数値`;
+}
+
+const AUDIENCES = {
+  client: { includeRevenue: false, rules: CLIENT_RULES },
+  internal: { includeRevenue: true, rules: feeAdjustedRules(80) },
+  agency: { includeRevenue: true, rules: feeAdjustedRules(70) },
+};
+
+async function composeAnswer(question, results, audience) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { answer: "", error: "OPENAI_API_KEYが設定されていません。" };
 
@@ -71,8 +103,8 @@ async function composeAnswer(question, results) {
       },
       body: JSON.stringify({
         model: process.env.LIVER_ANSWER_MODEL || "gpt-5.6-luna",
-        instructions: ANSWER_INSTRUCTIONS,
-        input: `お客さまからの質問:\n${question}\n\n参照できる資料ページ:\n${pages}`,
+        instructions: `${BASE_INSTRUCTIONS}\n\n${audience.rules}`,
+        input: `質問:\n${question}\n\n参照できる資料ページ:\n${pages}`,
         reasoning: { effort: "medium" },
         max_output_tokens: 2500,
       }),
@@ -104,12 +136,14 @@ export async function POST(request) {
       return Response.json({ error: "質問内容を入力してください。" }, { status: 400 });
     }
 
-    const results = await searchKnowledge(question, 8);
+    const audience = AUDIENCES[String(body.audience || "client")] || AUDIENCES.client;
+
+    const results = await searchKnowledge(question, 8, { includeRevenue: audience.includeRevenue });
     if (!results.length) {
       return Response.json({ ok: true, answer: "", results: [], message: "登録済みの資料の中に、該当する内容が見つかりませんでした。" });
     }
 
-    const { answer, error: answerError } = await composeAnswer(question, results);
+    const { answer, error: answerError } = await composeAnswer(question, results, audience);
 
     // 表示用の根拠一覧は資料ごとにまとめる（同じ資料の複数ページを重複表示しない）
     const seen = new Set();

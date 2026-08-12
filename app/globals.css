@@ -2213,3 +2213,4 @@ html, body {
 #liverSources .accounting-history-row p { margin: 6px 0 0; color: #5c6a75; font-size: .88rem; line-height: 1.6; }
 .liver-answer { white-space: pre-wrap; text-align: left; line-height: 1.85; padding: 16px 18px; border: 1px solid #dce3e7; border-radius: 13px; background: white; }
 #liverSourcesBox, #liverAnswerBox { text-align: left; }
+.liver-audience-note { margin: 10px 16px 0; padding: 8px 12px; border-radius: 9px; background: #eef4f7; color: #4a5a66; font-size: .82rem; font-weight: 700; text-align: center; }

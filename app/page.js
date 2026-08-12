@@ -826,6 +826,7 @@ export default function Home() {
               <p>登録済みの配信・代理店資料をもとに、お客さまへそのまま送れる回答を作ります</p>
             </div>
           </header>
+          <p className="liver-audience-note" id="liverAudienceNote"></p>
 
           <nav className="accounting-tabs" aria-label="ライバー資料メニュー">
             <button type="button" className="active" data-liver-tab="ask">質疑応答</button>
