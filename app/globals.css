@@ -2211,4 +2211,5 @@ html, body {
 /* ライバー部署（ひなた）のデスク */
 #liverSources .accounting-history-row { grid-template-columns: 1fr auto; }
 #liverSources .accounting-history-row p { margin: 6px 0 0; color: #5c6a75; font-size: .88rem; line-height: 1.6; }
-.liver-answer { white-space: pre-wrap; line-height: 1.85; padding: 16px 18px; border: 1px solid #dce3e7; border-radius: 13px; background: white; }
+.liver-answer { white-space: pre-wrap; text-align: left; line-height: 1.85; padding: 16px 18px; border: 1px solid #dce3e7; border-radius: 13px; background: white; }
+#liverSourcesBox, #liverAnswerBox { text-align: left; }
