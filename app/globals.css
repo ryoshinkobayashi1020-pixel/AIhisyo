@@ -2207,3 +2207,8 @@ html, body {
   .invoice-item-row input:nth-of-type(4), .invoice-item-row input:nth-of-type(5) { grid-column: span 1; }
   .accounting-history-row { grid-template-columns: 1fr; }
 }
+
+/* ライバー部署（ひなた）のデスク */
+#liverSources .accounting-history-row { grid-template-columns: 1fr auto; }
+#liverSources .accounting-history-row p { margin: 6px 0 0; color: #5c6a75; font-size: .88rem; line-height: 1.6; }
+.liver-answer { white-space: pre-wrap; line-height: 1.85; padding: 16px 18px; border: 1px solid #dce3e7; border-radius: 13px; background: white; }

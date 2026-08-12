@@ -285,6 +285,9 @@ export default function Home() {
         <button type="button" data-office-room="tiktok">
           <span>🎬</span><strong>TikTok運用</strong>
         </button>
+        <button type="button" data-office-room="liver">
+          <span>📚</span><strong>ライバー</strong>
+        </button>
       </nav>
 
       <main className="layout">
@@ -808,6 +811,63 @@ export default function Home() {
           <section className="accounting-panel" data-accounting-panel="history">
             <div className="accounting-section-title"><strong>請求書履歴</strong><span id="accountingHistoryCount"></span></div>
             <div id="accountingHistoryList" className="accounting-history"></div>
+          </section>
+        </div>
+      </div>
+
+      <div className="modal-overlay accounting-overlay" id="liverOverlay" hidden>
+        <div className="modal accounting-modal" role="dialog" aria-modal="true" aria-labelledby="liverTitle">
+          <button className="modal-close" id="liverClose" aria-label="閉じる">✕</button>
+          <header className="accounting-header">
+            <div className="accounting-avatar">📚</div>
+            <div>
+              <span>ライバー資料・質疑応答担当</span>
+              <h3 id="liverTitle">ひなたのデスク</h3>
+              <p>登録済みの配信・代理店資料をもとに、お客さまへそのまま送れる回答を作ります</p>
+            </div>
+          </header>
+
+          <nav className="accounting-tabs" aria-label="ライバー資料メニュー">
+            <button type="button" className="active" data-liver-tab="ask">質疑応答</button>
+            <button type="button" data-liver-tab="materials">資料を追加</button>
+          </nav>
+
+          <section className="accounting-panel active" data-liver-panel="ask">
+            <div className="accounting-voice-box">
+              <div>
+                <strong>お客さまからの質問を入力</strong>
+                <small>資料に書かれている内容だけを根拠に回答を作成します</small>
+              </div>
+              <button type="button" id="liverMicBtn">🎤 音声入力</button>
+              <textarea id="liverQuestion" rows={3} placeholder="例：新人ライバーの報酬はどのくらいから発生しますか？"></textarea>
+              <button type="button" className="btn-primary" id="liverAskBtn">回答を作成</button>
+              <p id="liverAskStatus" aria-live="polite"></p>
+            </div>
+
+            <div id="liverAnswerBox" hidden>
+              <div className="accounting-section-title"><strong>お客さま向けの回答</strong><button type="button" id="liverCopyAnswer">コピー</button></div>
+              <div id="liverAnswer" className="liver-answer"></div>
+            </div>
+
+            <div id="liverSourcesBox" hidden>
+              <div className="accounting-section-title"><strong>根拠になった資料</strong></div>
+              <div id="liverSources" className="accounting-history"></div>
+            </div>
+          </section>
+
+          <section className="accounting-panel" data-liver-panel="materials">
+            <div className="accounting-section-title"><strong>資料を追加登録</strong></div>
+            <p className="client-list-help">PDF・PNG・JPGを登録できます。PDFは本文を読み取って検索できるようにします。</p>
+            <div className="invoice-form-grid">
+              <label>分類（フォルダ名など）
+                <input id="liverUploadCategory" placeholder="例：TikTokについて / 04_配信ノウハウ" />
+              </label>
+              <label>ファイル
+                <input id="liverUploadFile" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple />
+              </label>
+            </div>
+            <button type="button" className="btn-done-lg" id="liverUploadBtn">この資料を登録</button>
+            <p id="liverUploadStatus" aria-live="polite"></p>
           </section>
         </div>
       </div>

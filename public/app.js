@@ -21,6 +21,7 @@ const STAFF = [
   { id: "invoice_clerk", name: "みさき", gender: "female", role: "請求担当・社長個人予定担当", emoji: "📅", grad: ["#ff91c8", "#f3b64c"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
   { id: "ryoshin_jobs", name: "ことは", gender: "female", role: "求人TikTok台本担当", emoji: "📣", grad: ["#a77de8", "#6544ae"], ear: "round", eyes: "sparkle", accessory: "star", shape: "round" },
   { id: "ryoshin_video_editor", name: "そうた", gender: "male", role: "TikTok動画編集担当", emoji: "✂️", grad: ["#4f9fd8", "#285c94"], ear: "floppy", eyes: "dot", accessory: "glasses", shape: "wide" },
+  { id: "liver_assistant", name: "ひなた", gender: "female", role: "ライバー資料・質疑応答担当", emoji: "📚", grad: ["#7ad3f0", "#4a7fd6"], ear: "round", eyes: "sparkle", accessory: "bow", shape: "round" },
 ];
 
 const ROLE_KEYWORDS = {
@@ -41,6 +42,7 @@ const ROLE_KEYWORDS = {
   "求人TikTok台本担当": ["良心の求人", "良心求人", "良心の求人台本", "良心TikTok求人", "ことは"],
   "TikTok動画編集担当": ["良心の動画編集", "良心動画編集", "TikTok動画編集", "動画編集", "そうた"],
   "コンサル担当": ["えるふのコンサル", "コンサル", "コンサルティング", "ライン提案", "LINE提案", "個人アカウント提案", "TikTok LIVE提案", "つばさ"],
+  "ライバー資料・質疑応答担当": ["ライバー", "らいばー", "ひなた", "配信ガイドライン", "事務所報酬", "代理店", "インセンティブ", "資料", "質疑応答"],
 };
 
 const TEAMS = [
@@ -51,11 +53,13 @@ const TEAMS = [
   { id: "kabayaki", name: "かばやき屋 TikTok運用代行チーム", desc: "", icon: "🎥", t: ["#e8b865", "#9c6837"], staff: ["kabayaki_script"] },
   { id: "accounting", name: "社長予定・請求管理", desc: "社長の個人予定と請求書を管理", icon: "💖", t: ["#ff8fc4", "#f0aa45"], staff: ["invoice_clerk"] },
   { id: "ryoshin_tiktok", name: "良心 TikTok運用チーム", desc: "求人台本制作とTikTok動画編集", icon: "📱", t: ["#a77de8", "#3f79b8"], staff: ["ryoshin_jobs", "ryoshin_video_editor"] },
+  { id: "liver", name: "ライバー部署", desc: "配信・代理店資料の管理と質疑応答", icon: "📚", t: ["#7ad3f0", "#4a7fd6"], staff: ["liver_assistant"] },
 ];
 const SCRIPT_STAFF_IDS = new Set(["elf_sketch", "elf_if", "elf_lively", "elf_jobs", "mana_jobs", "mana_narration", "mana_staff_dialogue", "miyabis_ads", "kabayaki_script", "ryoshin_jobs"]);
 const OFFICE_ROOMS = {
   operations: ["management", "accounting"],
   tiktok: ["elfrontier", "mana_corporation", "miyabis", "kabayaki", "ryoshin_tiktok"],
+  liver: ["liver"],
 };
 const OFFICE_ROOM_KEY = "aiOfficeActiveRoom";
 let activeOfficeRoom = localStorage.getItem(OFFICE_ROOM_KEY);
@@ -1046,6 +1050,7 @@ const STAFF_VOICE_PROFILES = {
   ryoshin_video_editor:{ gender: "male", pitch: .84, rate: 1.02, voiceOffset: 2 },
   invoice_clerk:{ gender: "female", pitch: 1.18, rate: 1.08, voiceOffset: 10 },
   elf_consult:{ gender: "male", pitch: .92, rate: 1.0, voiceOffset: 11 },
+  liver_assistant:{ gender: "female", pitch: 1.14, rate: 1.02, voiceOffset: 12 },
 };
 
 function voiceLooksFemale(voice) {
@@ -2420,6 +2425,10 @@ function openInstructionModal(staffId) {
     openAccountingDesk("", "clients");
     return;
   }
+  if (staffId === "liver_assistant") {
+    openLiverDesk();
+    return;
+  }
   activeModalStaffId = staffId;
   const scriptPromptMode = SCRIPT_STAFF_IDS.has(staffId);
   modalOverlay.classList.toggle("script-prompt-mode", scriptPromptMode);
@@ -2653,7 +2662,9 @@ async function handleInstructionSubmit(staffId, text, recognizedTargets = {}) {
   const narrowedTeamRoleStaff = !staffId && !explicitlyCalledStaffList.length && explicitlyCalledTeams.length === 1
     ? findExplicitTeamRoleStaff(explicitlyCalledTeams[0], normalizedForRouting)
     : null;
-  const effectiveCalledTeams = narrowedTeamRoleStaff ? [] : explicitlyCalledTeams;
+  // 特定の社員カードから直接話しかけた場合（staffIdが確定している場合）は、
+  // 発言に他チームの名前が混ざっていても、そのチーム全員への一斉送信はしない。
+  const effectiveCalledTeams = (staffId || narrowedTeamRoleStaff) ? [] : explicitlyCalledTeams;
   const teamStaff = effectiveCalledTeams.flatMap(team =>
     team.staff.map(id => STAFF.find(staff => staff.id === id)).filter(Boolean)
   );
@@ -7137,6 +7148,177 @@ document.getElementById("accountingMicBtn")?.addEventListener("click", () => {
   };
   recognition.start();
   accountingRecognition = recognition;
+  button.classList.add("listening");
+  button.textContent = "■ 停止";
+});
+
+/* ---------------- liver department (ひなた) ---------------- */
+let liverRecognition = null;
+
+function openLiverDesk() {
+  document.getElementById("liverOverlay").hidden = false;
+  switchLiverTab("ask");
+}
+
+function closeLiverDesk() {
+  if (liverRecognition) {
+    try { liverRecognition.stop(); } catch {}
+    liverRecognition = null;
+  }
+  document.getElementById("liverOverlay").hidden = true;
+}
+
+function switchLiverTab(name) {
+  document.querySelectorAll("[data-liver-tab]").forEach(button => {
+    button.classList.toggle("active", button.dataset.liverTab === name);
+  });
+  document.querySelectorAll("[data-liver-panel]").forEach(panel => {
+    panel.classList.toggle("active", panel.dataset.liverPanel === name);
+  });
+}
+
+async function readLiverJson(response, fallbackMessage) {
+  const contentType = response.headers.get("content-type") || "";
+  const raw = await response.text();
+  if (!contentType.includes("application/json")) {
+    console.error("Liver endpoint returned non-JSON:", response.status, raw.slice(0, 500));
+    throw new Error(`${fallbackMessage}（サーバーから不正な応答が返されました。画面を再読み込みしてもう一度お試しください）`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error(`${fallbackMessage}（応答データを読み取れませんでした）`);
+  }
+}
+
+function renderLiverSources(results) {
+  const box = document.getElementById("liverSourcesBox");
+  const list = document.getElementById("liverSources");
+  if (!results.length) {
+    box.hidden = true;
+    list.innerHTML = "";
+    return;
+  }
+  list.innerHTML = results.map(item => `<div class="accounting-history-row">
+    <div>
+      <strong>${escapeHtml(item.fileName)}</strong>
+      ${item.page ? `<small>${item.page}ページ目</small>` : ""}
+      ${item.category ? `<small>${escapeHtml(item.category)}</small>` : ""}
+      ${item.snippet ? `<p>${escapeHtml(item.snippet)}</p>` : ""}
+    </div>
+    <a href="${escapeHtml(item.materialUrl)}" target="_blank" rel="noopener">資料を開く</a>
+  </div>`).join("");
+  box.hidden = false;
+}
+
+async function askLiverAssistant() {
+  const question = document.getElementById("liverQuestion").value.trim();
+  const status = document.getElementById("liverAskStatus");
+  const answerBox = document.getElementById("liverAnswerBox");
+  if (!question) {
+    status.textContent = "質問内容を入力してください。";
+    return;
+  }
+  status.textContent = "資料を検索して回答を作成しています…";
+  answerBox.hidden = true;
+  try {
+    const response = await fetch("/api/liver-assistant/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    const data = await readLiverJson(response, "回答を作成できませんでした。");
+    if (!response.ok) throw new Error(data.error || "回答を作成できませんでした。");
+
+    renderLiverSources(data.results || []);
+    if (data.answer) {
+      document.getElementById("liverAnswer").textContent = data.answer;
+      answerBox.hidden = false;
+      status.textContent = "";
+      showBubble("liver_assistant", "💬 回答をまとめました。内容をご確認ください。", 6000);
+    } else {
+      status.textContent = data.message || "回答文は作成できませんでしたが、該当しそうな資料を下に表示しました。";
+    }
+  } catch (error) {
+    status.textContent = error.message;
+  }
+}
+
+async function uploadLiverMaterials() {
+  const input = document.getElementById("liverUploadFile");
+  const category = document.getElementById("liverUploadCategory").value.trim();
+  const status = document.getElementById("liverUploadStatus");
+  const files = [...(input.files || [])];
+  if (!files.length) {
+    status.textContent = "登録するファイルを選択してください。";
+    return;
+  }
+  let done = 0;
+  for (const file of files) {
+    status.textContent = `登録中… (${done + 1}/${files.length}) ${file.name}`;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("category", category || "追加資料");
+    try {
+      const response = await fetch("/api/liver-assistant/upload", { method: "POST", body: formData });
+      const data = await readLiverJson(response, "資料を登録できませんでした。");
+      if (!response.ok) throw new Error(data.error || "資料を登録できませんでした。");
+      done += 1;
+    } catch (error) {
+      status.textContent = `${file.name} の登録に失敗しました：${error.message}`;
+      return;
+    }
+  }
+  status.textContent = `${done}件の資料を登録しました。`;
+  input.value = "";
+}
+
+document.getElementById("liverClose")?.addEventListener("click", closeLiverDesk);
+document.getElementById("liverOverlay")?.addEventListener("click", event => {
+  if (event.target.id === "liverOverlay") closeLiverDesk();
+});
+document.querySelectorAll("[data-liver-tab]").forEach(button => {
+  button.addEventListener("click", () => switchLiverTab(button.dataset.liverTab));
+});
+document.getElementById("liverAskBtn")?.addEventListener("click", askLiverAssistant);
+document.getElementById("liverUploadBtn")?.addEventListener("click", uploadLiverMaterials);
+document.getElementById("liverCopyAnswer")?.addEventListener("click", async () => {
+  const text = document.getElementById("liverAnswer").textContent || "";
+  if (!text) return;
+  await navigator.clipboard.writeText(text).catch(() => {});
+  document.getElementById("liverAskStatus").textContent = "回答をコピーしました。";
+});
+document.getElementById("liverMicBtn")?.addEventListener("click", () => {
+  const button = document.getElementById("liverMicBtn");
+  if (liverRecognition) {
+    try { liverRecognition.stop(); } catch {}
+    return;
+  }
+  if (!SpeechRecognitionCtor) {
+    document.getElementById("liverAskStatus").textContent = "この端末では音声入力を利用できません。テキストで入力してください。";
+    return;
+  }
+  const recognition = new SpeechRecognitionCtor();
+  recognition.lang = "ja-JP";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  let finalText = document.getElementById("liverQuestion").value;
+  recognition.onresult = event => {
+    let partial = "";
+    for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      const text = event.results[index][0].transcript;
+      if (event.results[index].isFinal) finalText += `${finalText ? " " : ""}${text}`;
+      else partial += text;
+    }
+    document.getElementById("liverQuestion").value = `${finalText}${partial ? ` ${partial}` : ""}`.trim();
+  };
+  recognition.onend = () => {
+    liverRecognition = null;
+    button.classList.remove("listening");
+    button.textContent = "🎤 音声入力";
+  };
+  recognition.start();
+  liverRecognition = recognition;
   button.classList.add("listening");
   button.textContent = "■ 停止";
 });
