@@ -39,6 +39,8 @@ const BASE_INSTRUCTIONS = `あなたはTikTok LIVE事務所のアシスタント
 守ること:
 - 資料に無い数字や条件を創作しない
 - 「資料によると」「抜粋には」など、社内の資料を参照していることが分かる言い回しは使わない
+- 資料名・ファイル名・ページ番号を回答へ書かない
+- 「詳しくは〇〇の資料をご確認ください」のように、社内資料へ誘導する書き方をしない
 - 著作権表記や秘密保持の注意書きは回答へ含めない
 - 挨拶や署名は付けず、本文だけを書く`;
 
@@ -77,10 +79,13 @@ function feeAdjustedRules(retainedPercent) {
 - 応募条件、期間、開催日などの数値`;
 }
 
+// showSources: 根拠資料の一覧と原本リンクを画面へ返すかどうか。
+// 資料には秘密保持義務があるため、社外へ渡る可能性のある窓口では原本を出さず、
+// 回答文だけを見せる。社内用のなぎさだけは内容確認のために原本を開ける。
 const AUDIENCES = {
-  client: { includeRevenue: false, rules: CLIENT_RULES },
-  internal: { includeRevenue: true, rules: feeAdjustedRules(80) },
-  agency: { includeRevenue: true, rules: feeAdjustedRules(70) },
+  client: { includeRevenue: false, showSources: false, rules: CLIENT_RULES },
+  internal: { includeRevenue: true, showSources: true, rules: feeAdjustedRules(80) },
+  agency: { includeRevenue: true, showSources: false, rules: feeAdjustedRules(70) },
 };
 
 async function composeAnswer(question, results, audience) {
@@ -145,26 +150,29 @@ export async function POST(request) {
 
     const { answer, error: answerError } = await composeAnswer(question, results, audience);
 
-    // 表示用の根拠一覧は資料ごとにまとめる（同じ資料の複数ページを重複表示しない）
-    const seen = new Set();
+    // 社外へ渡る窓口では、資料名も抜粋も原本リンクも返さない。回答文だけを見せる。
     const sources = [];
-    for (const item of results) {
-      if (seen.has(item.documentId)) continue;
-      seen.add(item.documentId);
-      sources.push({
-        documentId: item.documentId,
-        category: item.category,
-        fileName: `${item.fileName}.${item.fileExt}`,
-        page: item.page,
-        snippet: item.snippet,
-        materialUrl: `/api/liver-assistant/materials/${item.documentId}`,
-      });
+    if (audience.showSources) {
+      // 根拠一覧は資料ごとにまとめる（同じ資料の複数ページを重複表示しない）
+      const seen = new Set();
+      for (const item of results) {
+        if (seen.has(item.documentId)) continue;
+        seen.add(item.documentId);
+        sources.push({
+          documentId: item.documentId,
+          category: item.category,
+          fileName: `${item.fileName}.${item.fileExt}`,
+          page: item.page,
+          snippet: item.snippet,
+          materialUrl: `/api/liver-assistant/materials/${item.documentId}`,
+        });
+      }
     }
 
     return Response.json({
       ok: true,
       answer,
-      message: answer ? "" : (answerError || "回答文は作成できませんでしたが、該当しそうな資料を下に表示しました。"),
+      message: answer ? "" : (answerError || "回答文を作成できませんでした。"),
       results: sources,
     });
   } catch (error) {
