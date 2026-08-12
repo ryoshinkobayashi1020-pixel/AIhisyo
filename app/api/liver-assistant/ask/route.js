@@ -56,6 +56,20 @@ const CLIENT_RULES = `この回答はクライアントへ提示するもので�
 「担当者より個別にご案内いたします」とだけ書いてください。
 （ライバー本人が受け取るクリエイター報酬・ライバー報酬の説明は含めて構いません）`;
 
+// バディ制度は事務所報酬を投げ銭として還元する任意の仕組みであって、
+// 事務所報酬そのものの計算式ではない。にもかかわらずAIが繰り返し
+// 「バディ率30％」を計算根拠に使い、実際より高い金額を答えていたため明示的に禁じる。
+const NO_BUDDY_BASIS = `事務所報酬の金額を答えるとき、バディ制度（バディ率・バディ報酬）を
+計算の根拠に使ってはいけません。バディ制度は事務所報酬を投げ銭として還元する任意の仕組みで、
+事務所報酬そのものの計算式ではありません。
+事務所報酬は次の4つのインセンティブの合計です:
+- ①ランクアップ／維持インセンティブ
+- ②アクティブインセンティブ
+- ③売上増加インセンティブ
+- ④優良クリエイターインセンティブ（他プラットフォーム実績者のみ・6ヶ月限定）
+いずれも「獲得ダイヤ数 × 1ダイヤあたりの単価(ドル) × 為替」で算出します。
+ライバー報酬に何％かを掛けて事務所報酬を出す計算はしないでください。`;
+
 // 換算対象を取り違えないための共通ルール。
 // 事務所報酬以外の数値まで掛け算してしまうと、罰金額や実績値まで狂う。
 const CONVERSION_SCOPE = `すべての事務所報酬の数値へ漏れなく適用してください。1か所だけ換算して
@@ -77,12 +91,18 @@ const INTERNAL_RULES = `この回答は社内スタッフ向けです。事務�
 
 - 資料に書かれている事務所報酬の金額・料率へ80％を掛けた数値が、弊社の受取額です
   （例: 資料が1,500ドルなら1,200ドル、資料が30％なら21％）
-- ${CONVERSION_SCOPE}`;
+
+${NO_BUDDY_BASIS}
+
+${CONVERSION_SCOPE}`;
 
 // 代理店パートナー向け。資料の数値ではなく「御社に適用される料率」を答える。
 // 弊社の取り分は非開示という立場を明示するので、数値を偽らずに済む。
-const AGENCY_RULES = `この回答は代理店パートナー向けです。事務所報酬について答えるときは、
-資料の数値をそのまま出すのではなく「御社に適用される料率・金額」を答えてください。
+const AGENCY_RULES = `この回答は代理店パートナー向けです。
+
+まず大前提として、金額は出し惜しみせず答えてください。
+非開示にするのは「料率（〜％）」だけです。金額を聞かれたら必ず金額で答えます。
+「担当者にご確認ください」で済ませてよいのは、資料から金額が算出できないときだけです。
 
 御社の適用額:
 - 資料に書かれている事務所報酬の金額へ70％を掛けた金額が、御社の適用額です
@@ -90,12 +110,16 @@ const AGENCY_RULES = `この回答は代理店パートナー向けです。事�
 - 回答では「御社の事務所報酬は〜です」のように、御社に適用される条件として提示する
 - 事務所報酬については金額だけを答え、料率（〜％）は書かない。
   資料に料率で書かれている場合は、具体的な金額の例に置き換えて説明する
-- ${CONVERSION_SCOPE}
+
+${NO_BUDDY_BASIS}
+
+${CONVERSION_SCOPE}
 
 料率や弊社の取り分を聞かれたとき:
 - 事務所報酬の料率、弊社の取り分、手数料の割合は、いずれも開示していません
 - 「料率につきましては個別のご契約に基づくご案内となりますので、
-  担当者よりご連絡いたします」とだけ答える
+  担当者よりご連絡いたします」と答える
+- ただしこれは料率だけの話です。同じ質問の中に金額の要素があれば、金額は答えること
 
 弊社の手数料・控除について、絶対にしてはいけないこと:
 - 「手数料はありません」「差し引くことはありません」「100％お支払いします」など、
@@ -132,9 +156,29 @@ const FEE_DISCLOSURE_FALLBACK = `事務所報酬の料率につきましては�
 
 ご不明な点がございましたら、担当者までお問い合わせください。`;
 
-function violatesFeeDisclosureRule(answer) {
-  const normalized = String(answer || "").replace(/\s+/g, "");
-  return FEE_DENIAL_PATTERNS.some(pattern => pattern.test(normalized));
+// 手数料を否定している文だけを取り除く。
+// 回答ごと差し替えると、正しく算出できていた金額まで消えてしまい、
+// 「細かい数字になると答えてくれない」状態になる。
+export function stripFeeDenials(answer) {
+  const lines = String(answer || "").split("\n");
+  const kept = [];
+  let removed = false;
+  for (const line of lines) {
+    const sentences = line.split(/(?<=。)/);
+    const keptSentences = sentences.filter(sentence => {
+      const normalized = sentence.replace(/\s+/g, "");
+      if (!normalized) return true;
+      const hit = FEE_DENIAL_PATTERNS.some(pattern => pattern.test(normalized));
+      if (hit) removed = true;
+      return !hit;
+    });
+    const rebuilt = keptSentences.join("").trimEnd();
+    // 文をすべて落とした行（箇条書きなど）は行ごと捨てる
+    if (!rebuilt && line.trim()) continue;
+    kept.push(rebuilt);
+  }
+  const result = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { text: result, removed };
 }
 
 // 「100万円投げられたら事務所にいくら入る？」のような金額の質問は、
@@ -154,8 +198,9 @@ function parseJapaneseAmount(text) {
 
 function isRewardAmountQuestion(text) {
   const value = String(text);
-  return /(いくら|何円|どれくらい|どのくらい|金額)/.test(value)
-    && /(事務所報酬|事務所|入る|入って|報酬|受け取|もらえ)/.test(value);
+  // 「100万投げられたら？」のように述語が省略される聞き方も拾う。
+  // 金額かダイヤ数が書かれていることは呼び出し側で確認している。
+  return /(いくら|何円|どれくらい|どのくらい|金額|報酬|入る|入って|受け取|もらえ|なる)/.test(value);
 }
 
 function yen(value) {
@@ -171,25 +216,33 @@ function buildRewardAnswer(question, audience) {
   const keep = calculateReward({ diamonds, rankMovement: "keep" });
   const up = calculateReward({ diamonds, rankMovement: "up" });
 
-  // 料率が確定していない項目があるうちは、金額を出さずに担当者へ回す。
-  // 推測の数字を自動返信で送るより、確認に回すほうが安全。
-  if (keep.unresolved.length && up.unresolved.length) {
-    return `恐れ入りますが、こちらの金額は配信状況によって変動いたしますので、担当者より個別にご案内いたします。`;
-  }
+  // ①ランクアップ/維持の単価は、資料から読み取れていないランクがある。
+  // その場合でも②③は確定しているので、①を除いた金額を「最低限これだけは入る額」として答える。
+  // 黙って少なく見せることになるため、変動する旨を必ず添える。
+  const baseOnly = calculateReward({ diamonds, rankMovement: "down" });
 
   const share = audience.rewardShare;
   const lines = [];
+
+  // ②③だけでも算出できなければ、金額は出さない
+  if (baseOnly.unresolved.length) return null;
 
   if (audience.showBreakdown) {
     lines.push(`${parsed.unit === "diamond" ? `${parsed.value.toLocaleString("ja-JP")}ダイヤ` : yen(parsed.value)}の場合、獲得ダイヤは約${diamonds.toLocaleString("ja-JP")}ダイヤ（ランク${keep.rank}）です。`);
     lines.push("");
     lines.push(`・ライバー報酬：${yen(keep.liverReward)}`);
+    lines.push("");
     if (!keep.unresolved.length) {
-      lines.push("");
       lines.push("【ランク維持の場合】");
       for (const item of keep.breakdown) lines.push(`・${item.label}：${item.note || yen(item.amount)}`);
       lines.push(`・事務所報酬 合計：${yen(keep.total)}`);
       lines.push(`・弊社受取：${yen(keep.total * share)}`);
+    } else {
+      lines.push("【ランクアップ／維持インセンティブを除いた分】");
+      for (const item of baseOnly.breakdown.filter(item => item.key !== "rank")) lines.push(`・${item.label}：${yen(item.amount)}`);
+      lines.push(`・小計：${yen(baseOnly.total)}`);
+      lines.push(`・弊社受取：${yen(baseOnly.total * share)}`);
+      lines.push(`※ランク${keep.rank}の維持単価が資料から確定できていないため、①の分は含まれていません。実際はこれより多くなります。`);
     }
     if (!up.unresolved.length) {
       lines.push("");
@@ -200,16 +253,16 @@ function buildRewardAnswer(question, audience) {
     }
   } else {
     // 代理店向けは金額のみ。内訳や料率は出さない。
-    if (!keep.unresolved.length) lines.push(`ランクを維持された場合、御社の事務所報酬は約${yen(keep.total * share)}です。`);
-    if (!up.unresolved.length) lines.push(`ランクアップされた場合は約${yen(up.total * share)}となります。`);
+    if (!keep.unresolved.length) {
+      lines.push(`ランクを維持された場合、御社の事務所報酬は約${yen(keep.total * share)}です。`);
+      if (!up.unresolved.length) lines.push(`ランクアップされた場合は約${yen(up.total * share)}となります。`);
+    } else {
+      // ①が確定していない状態で断定すると少なく伝えてしまうため、下限として示す
+      lines.push(`御社の事務所報酬は、${yen(baseOnly.total * share)}以上となる見込みです。`);
+      lines.push("ランクの推移によってはこれに加算されますので、確定額は担当者よりご案内いたします。");
+    }
     lines.push("");
     lines.push("実際の金額は、配信日数や獲得ダイヤ数などの状況により変動いたします。");
-  }
-
-  const unresolvedAll = [...new Set([...keep.unresolved, ...up.unresolved])];
-  if (unresolvedAll.length && audience.showBreakdown) {
-    lines.push("");
-    lines.push(`※次の料率が資料から確定できていないため、この金額には含めていません：${unresolvedAll.join("、")}`);
   }
   return lines.join("\n");
 }
@@ -282,9 +335,11 @@ export async function POST(request) {
 
     let { answer, error: answerError } = await composeAnswer(question, results, audience);
 
-    // 代理店向けで手数料の有無を断定してしまった回答は、そのまま送らせない。
-    if (audience.guardFeeDisclosure && violatesFeeDisclosureRule(answer)) {
-      answer = FEE_DISCLOSURE_FALLBACK;
+    // 代理店向けで手数料の有無を断定してしまった文だけを取り除く。
+    // 残りが無くなった場合にかぎり、非開示の案内へ差し替える。
+    if (audience.guardFeeDisclosure && answer) {
+      const { text, removed } = stripFeeDenials(answer);
+      if (removed) answer = text || FEE_DISCLOSURE_FALLBACK;
     }
 
     // 社外へ渡る窓口では、資料名も抜粋も原本リンクも返さない。回答文だけを見せる。
